@@ -3,7 +3,7 @@ name: Build and Deploy to Azure
 on:
   push:
     branches: [main]
-  workflow_dispatch: # allows manual trigger from GitHub UI
+  workflow_dispatch:
 
 env:
   REGISTRY: acrgrantsagent.azurecr.io
@@ -34,14 +34,26 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
+      # Build frontend on the runner (avoids npm-in-Docker issues)
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build frontend
+        working-directory: ./frontend
+        env:
+          VITE_API_URL: ${{ env.BACKEND_URL }}
+        run: |
+          npm install --legacy-peer-deps
+          npm run build
+
       - name: Build and push frontend image
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
-          build-args: |
-            VITE_API_URL=${{ env.BACKEND_URL }}
 
       - name: Build and push backend image
         uses: docker/build-push-action@v5

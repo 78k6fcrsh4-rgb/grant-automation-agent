@@ -1,17 +1,7 @@
-# Stage 1: build
-FROM node:22 AS builder
-WORKDIR /app
-ARG VITE_API_URL
-ENV VITE_API_URL=$VITE_API_URL
-COPY package*.json ./
-RUN npm install --legacy-peer-deps
-COPY . .
-RUN npm run build
-
-# Stage 2: serve with nginx
+# Serve pre-built static files with nginx
+# The dist/ folder is built by GitHub Actions before this image is created
 FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-# Route all requests to index.html for client-side routing
+COPY dist /usr/share/nginx/html
 RUN echo 'server { \
     listen 80; \
     root /usr/share/nginx/html; \
