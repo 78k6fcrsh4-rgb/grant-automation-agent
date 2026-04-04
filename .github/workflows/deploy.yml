@@ -53,6 +53,7 @@ jobs:
         with:
           context: ./frontend
           push: true
+          no-cache: true
           tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
 
       - name: Build and push backend image
