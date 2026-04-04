@@ -1,0 +1,54 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Grant Management Calendar//EN//
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Grant: Deadline Events
+X-WR-TIMEZONE:America/Chicago
+BEGIN:VEVENT
+SUMMARY:Letter of transmittal date
+DTSTART;VALUE=DATE:20231128
+DTEND;VALUE=DATE:20231129
+DTSTAMP:20260119T154802Z
+UID:58f55a39-bd83-4299-a09d-3bf36ff43cdb-deadline-1@grantmanagement.local
+CATEGORIES:Deadline
+DESCRIPTION:Letter of transmittal date\nOrganization: American Institutes 
+ for Research
+LOCATION:American Institutes for Research
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Letter of transmittal date in 7 days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Letter of transmittal date in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Proposal response date
+DTSTART;VALUE=DATE:20231128
+DTEND;VALUE=DATE:20231129
+DTSTAMP:20260119T154802Z
+UID:58f55a39-bd83-4299-a09d-3bf36ff43cdb-deadline-2@grantmanagement.local
+CATEGORIES:Deadline
+DESCRIPTION:Proposal response date\nOrganization: American Institutes for 
+ Research
+LOCATION:American Institutes for Research
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Proposal response date in 7 days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Proposal response date in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+END:VCALENDAR

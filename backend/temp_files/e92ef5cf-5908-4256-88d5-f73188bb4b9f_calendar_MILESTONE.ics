@@ -1,0 +1,31 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Grant Management Calendar//EN//
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Grant: Milestone Events
+X-WR-TIMEZONE:America/Chicago
+BEGIN:VEVENT
+SUMMARY:Standard Terms and Conditions document date
+DTSTART;VALUE=DATE:20201201
+DTEND;VALUE=DATE:20201202
+DTSTAMP:20260119T160822Z
+UID:e92ef5cf-5908-4256-88d5-f73188bb4b9f-milestone-0@grantmanagement.local
+CATEGORIES:Milestone
+DESCRIPTION:Standard Terms and Conditions document date
+LOCATION:
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Standard Terms and Conditions document date in 7 day
+ s
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Standard Terms and Conditions document date in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+END:VCALENDAR

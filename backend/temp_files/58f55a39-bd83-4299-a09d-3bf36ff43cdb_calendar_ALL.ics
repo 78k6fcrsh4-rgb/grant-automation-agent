@@ -1,0 +1,100 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Grant Management Calendar//EN//
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Grant: Equity Audit and Action Plan
+X-WR-TIMEZONE:America/Chicago
+BEGIN:VEVENT
+SUMMARY:[SUBMISSION] Proposal submission date
+DTSTART;VALUE=DATE:20230912
+DTEND;VALUE=DATE:20230913
+DTSTAMP:20260119T154802Z
+UID:58f55a39-bd83-4299-a09d-3bf36ff43cdb-0@grantmanagement.local
+CATEGORIES:Submission,Grant Management
+DESCRIPTION:Proposal submission date\nOrganization: American Institutes fo
+ r Research
+LOCATION:American Institutes for Research
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Proposal submission date in 7 days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Proposal submission date in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:[DEADLINE] Letter of transmittal date
+DTSTART;VALUE=DATE:20231128
+DTEND;VALUE=DATE:20231129
+DTSTAMP:20260119T154802Z
+UID:58f55a39-bd83-4299-a09d-3bf36ff43cdb-1@grantmanagement.local
+CATEGORIES:Deadline,Grant Management
+DESCRIPTION:Letter of transmittal date\nOrganization: American Institutes 
+ for Research
+LOCATION:American Institutes for Research
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Letter of transmittal date in 7 days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Letter of transmittal date in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:[DEADLINE] Proposal response date
+DTSTART;VALUE=DATE:20231128
+DTEND;VALUE=DATE:20231129
+DTSTAMP:20260119T154802Z
+UID:58f55a39-bd83-4299-a09d-3bf36ff43cdb-2@grantmanagement.local
+CATEGORIES:Deadline,Grant Management
+DESCRIPTION:Proposal response date\nOrganization: American Institutes for 
+ Research
+LOCATION:American Institutes for Research
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Proposal response date in 7 days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Proposal response date in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:[MILESTONE] Expected project start date (implied)
+DTSTART;VALUE=DATE:20231201
+DTEND;VALUE=DATE:20231202
+DTSTAMP:20260119T154802Z
+UID:58f55a39-bd83-4299-a09d-3bf36ff43cdb-3@grantmanagement.local
+CATEGORIES:Milestone,Grant Management
+DESCRIPTION:Expected project start date (implied)\nOrganization: American 
+ Institutes for Research
+LOCATION:American Institutes for Research
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Expected project start date (implied) in 7 days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Expected project start date (implied) in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+END:VCALENDAR

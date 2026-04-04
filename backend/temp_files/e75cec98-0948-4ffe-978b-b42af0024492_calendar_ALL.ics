@@ -1,0 +1,35 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Grant Management Calendar//EN//
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Grant: Emergency Solutions Grants (ESG) Program - CARES Act (
+ ESG-CV)
+X-WR-TIMEZONE:America/Chicago
+BEGIN:VEVENT
+SUMMARY:[MILESTONE] President Trump signed the CARES Act to help the Natio
+ n respond to the coronavirus outbreak.
+DTSTART;VALUE=DATE:20200327
+DTEND;VALUE=DATE:20200328
+DTSTAMP:20260119T160414Z
+UID:e75cec98-0948-4ffe-978b-b42af0024492-0@grantmanagement.local
+CATEGORIES:Milestone,Grant Management
+DESCRIPTION:President Trump signed the CARES Act to help the Nation respon
+ d to the coronavirus outbreak.
+LOCATION:
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: President Trump signed the CARES Act to help the Nat
+ ion respond to the coronavirus outbreak. in 7 days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: President Trump signed the CARES Act to help the Nat
+ ion respond to the coronavirus outbreak. in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+END:VCALENDAR

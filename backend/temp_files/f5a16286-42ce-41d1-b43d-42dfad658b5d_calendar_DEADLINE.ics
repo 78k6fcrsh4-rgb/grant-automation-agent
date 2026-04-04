@@ -1,0 +1,34 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Grant Management Calendar//EN//
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Grant: Deadline Events
+X-WR-TIMEZONE:America/Chicago
+BEGIN:VEVENT
+SUMMARY:Project Manager may request extension before scheduled end date if
+  needed
+DTSTART;VALUE=DATE:20991231
+DTEND;VALUE=DATE:21000101
+DTSTAMP:20260119T155815Z
+UID:f5a16286-42ce-41d1-b43d-42dfad658b5d-deadline-4@grantmanagement.local
+CATEGORIES:Deadline
+DESCRIPTION:Project Manager may request extension before scheduled end dat
+ e if needed
+LOCATION:
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Project Manager may request extension before schedul
+ ed end date if needed in 7 days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Project Manager may request extension before schedul
+ ed end date if needed in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+END:VCALENDAR

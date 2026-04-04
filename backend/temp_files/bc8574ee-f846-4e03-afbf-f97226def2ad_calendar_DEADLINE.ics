@@ -1,0 +1,31 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Grant Management Calendar//EN//
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Grant: Deadline Events
+X-WR-TIMEZONE:America/Chicago
+BEGIN:VEVENT
+SUMMARY:Proposal submission deadline
+DTSTART;VALUE=DATE:20230912
+DTEND;VALUE=DATE:20230913
+DTSTAMP:20260119T153816Z
+UID:bc8574ee-f846-4e03-afbf-f97226def2ad-deadline-0@grantmanagement.local
+CATEGORIES:Deadline
+DESCRIPTION:Proposal submission deadline\nOrganization: American Institute
+ s for Research
+LOCATION:American Institutes for Research
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Proposal submission deadline in 7 days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Proposal submission deadline in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+END:VCALENDAR

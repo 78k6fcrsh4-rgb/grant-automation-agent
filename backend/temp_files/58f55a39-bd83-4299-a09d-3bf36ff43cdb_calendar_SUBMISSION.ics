@@ -1,0 +1,32 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Grant Management Calendar//EN//
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Grant: Submission Events
+X-WR-TIMEZONE:America/Chicago
+BEGIN:VEVENT
+SUMMARY:Proposal submission date
+DTSTART;VALUE=DATE:20230912
+DTEND;VALUE=DATE:20230913
+DTSTAMP:20260119T154802Z
+UID:58f55a39-bd83-4299-a09d-3bf36ff43cdb-submission-0@grantmanagement.loca
+ l
+CATEGORIES:Submission
+DESCRIPTION:Proposal submission date\nOrganization: American Institutes fo
+ r Research
+LOCATION:American Institutes for Research
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Proposal submission date in 7 days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Proposal submission date in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+END:VCALENDAR

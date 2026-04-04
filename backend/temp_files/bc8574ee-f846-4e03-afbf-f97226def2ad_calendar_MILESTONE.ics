@@ -1,0 +1,31 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Grant Management Calendar//EN//
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Grant: Milestone Events
+X-WR-TIMEZONE:America/Chicago
+BEGIN:VEVENT
+SUMMARY:Expected project start date (implied)
+DTSTART;VALUE=DATE:20231201
+DTEND;VALUE=DATE:20231202
+DTSTAMP:20260119T153816Z
+UID:bc8574ee-f846-4e03-afbf-f97226def2ad-milestone-3@grantmanagement.local
+CATEGORIES:Milestone
+DESCRIPTION:Expected project start date (implied)\nOrganization: American 
+ Institutes for Research
+LOCATION:American Institutes for Research
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Expected project start date (implied) in 7 days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Expected project start date (implied) in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+END:VCALENDAR

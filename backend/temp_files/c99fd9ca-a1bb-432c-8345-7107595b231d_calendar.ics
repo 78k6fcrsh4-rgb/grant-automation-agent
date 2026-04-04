@@ -1,0 +1,9 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Grant Management Calendar//mxm.dk//
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALDESC:Important dates and deadlines for Processing Failed
+X-WR-CALNAME:Grant: Processing Failed
+X-WR-TIMEZONE:America/New_York
+END:VCALENDAR

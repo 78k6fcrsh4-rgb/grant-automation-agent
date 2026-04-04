@@ -1,0 +1,59 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Grant Management Calendar//EN//
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Grant: Comprehensive Equity Audit and Action Plan (EAAP)
+X-WR-TIMEZONE:America/Chicago
+BEGIN:VEVENT
+SUMMARY:[DEADLINE] Proposal submission deadline for RFP No. 25-600
+DTSTART;VALUE=DATE:20230912
+DTEND;VALUE=DATE:20230913
+DTSTAMP:20260119T160014Z
+UID:db582e07-fdd2-4c98-b020-8c263e5eb7d8-0@grantmanagement.local
+CATEGORIES:Deadline,Grant Management
+DESCRIPTION:Proposal submission deadline for RFP No. 25-600\nOrganization:
+  American Institutes for Research
+LOCATION:American Institutes for Research
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Proposal submission deadline for RFP No. 25-600 in 7
+  days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Proposal submission deadline for RFP No. 25-600 in 1
+  day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:[SUBMISSION] Transmittal letter and proposal submitted by AIR to D
+ eKalb County School District
+DTSTART;VALUE=DATE:20231128
+DTEND;VALUE=DATE:20231129
+DTSTAMP:20260119T160014Z
+UID:db582e07-fdd2-4c98-b020-8c263e5eb7d8-1@grantmanagement.local
+CATEGORIES:Submission,Grant Management
+DESCRIPTION:Transmittal letter and proposal submitted by AIR to DeKalb Cou
+ nty School District\nOrganization: American Institutes for Research
+LOCATION:American Institutes for Research
+PRIORITY:5
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Transmittal letter and proposal submitted by AIR to 
+ DeKalb County School District in 7 days
+TRIGGER:-P7D
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder: Transmittal letter and proposal submitted by AIR to 
+ DeKalb County School District in 1 day
+TRIGGER:-P1D
+END:VALARM
+END:VEVENT
+END:VCALENDAR
