@@ -45,8 +45,9 @@ jobs:
         env:
           VITE_API_URL: ${{ env.BACKEND_URL }}
         run: |
-          npm install --legacy-peer-deps
-          npm run build
+          npm install -g pnpm
+          pnpm install --no-frozen-lockfile
+          pnpm run build
 
       - name: Build and push frontend image
         run: |
