@@ -12,7 +12,6 @@ env:
   BACKEND_IMAGE: grants-backend
   FRONTEND_APP: ca-grants-frontend
   BACKEND_APP: ca-grants-backend
-  BACKEND_URL: https://ca-grants-backend.ambitioustree-e69e3f81.centralus.azurecontainerapps.io
 
 jobs:
   build-and-deploy:
@@ -33,21 +32,6 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
-
-      # Build frontend on the runner (avoids npm-in-Docker issues)
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Build frontend
-        working-directory: ./frontend
-        env:
-          VITE_API_URL: ${{ env.BACKEND_URL }}
-        run: |
-          npm install -g pnpm
-          pnpm install --no-frozen-lockfile
-          pnpm run build
 
       - name: Build and push frontend image
         run: |
