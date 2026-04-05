@@ -45,8 +45,7 @@ jobs:
         env:
           VITE_API_URL: ${{ env.BACKEND_URL }}
         run: |
-          npm install -g npm@latest
-          npm install --legacy-peer-deps --no-optional
+          npm install --legacy-peer-deps
           npm run build
 
       - name: Build and push frontend image
