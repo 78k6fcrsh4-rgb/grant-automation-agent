@@ -49,19 +49,14 @@ jobs:
           npm run build
 
       - name: Build and push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: true
-          no-cache: true
-          tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
+        run: |
+          docker build --no-cache -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest ./frontend
+          docker push ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
 
       - name: Build and push backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+        run: |
+          docker build --no-cache -t ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest ./backend
+          docker push ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
 
       - name: Deploy frontend to Container Apps
         uses: azure/container-apps-deploy-action@v1
