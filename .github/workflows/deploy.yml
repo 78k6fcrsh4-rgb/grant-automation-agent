@@ -59,17 +59,11 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-- name: Build frontend image
-  run: |
-    docker build \
-      --no-cache \
-      --build-arg VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }} \
-      -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }} \
-      -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest \
-      ./frontend      - name: Build frontend image
+      - name: Build frontend image
         run: |
           docker build \
             --no-cache \
+            --build-arg VITE_API_BASE_URL="${{ secrets.VITE_API_BASE_URL }}" \
             -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }} \
             -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest \
             ./frontend
