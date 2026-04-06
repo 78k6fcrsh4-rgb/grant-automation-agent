@@ -33,8 +33,31 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-      - name: Build and push frontend image
-        run: |
+      - name: Build frontend image
+        run: docker build --no-cache -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest ./frontend
+
+      - name: Push frontend image
+        run: docker push ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
+
+      - name: Build backend image
+        run: docker build --no-cache -t ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest ./backend
+
+      - name: Push backend image
+        run: docker push ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+
+      - name: Deploy frontend to Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: ${{ env.FRONTEND_APP }}
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          imageToDeploy: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
+
+      - name: Deploy backend to Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: ${{ env.BACKEND_APP }}
+          resourceGroup: ${{ env.RESOURCE_GROUP }}
+          imageToDeploy: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest        run: |
           docker build --no-cache -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest ./frontend
           docker push ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
 
