@@ -6,34 +6,59 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# DON'T initialize database for now
-# from app.db import init_db
-# init_db()
-
 app = FastAPI(
     title="Grant Automation API",
     description="API for automating grant management tasks for nonprofits",
     version="1.0.0"
 )
 
-# CORS Configuration — reads extra origins from CORS_ORIGINS env var (comma-separated)
-_default_origins = ["http://localhost:3000", "http://localhost:5173"]
-_extra_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+# --------------------------------------------------
+# CORS CONFIGURATION (UPDATED)
+# --------------------------------------------------
+
+# Always allow localhost (for development)
+default_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:8000"
+]
+
+# Allow deployed frontend
+azure_frontend = [
+    "https://ca-grants-frontend.ambitioustree-e69e3f81.centralus.azurecontainerapps.io"
+]
+
+# Allow additional origins from environment variable
+extra_origins = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "").split(",")
+    if o.strip()
+]
+
+# Combine all allowed origins
+allowed_origins = (
+    default_origins
+    + azure_frontend
+    + extra_origins
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_default_origins + _extra_origins,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
+# --------------------------------------------------
+# ROUTES
+# --------------------------------------------------
+
 app.include_router(grant_routes.router)
 
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
     return {
         "message": "Grant Automation API",
         "version": "1.0.0",
@@ -44,7 +69,6 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Health check"""
     return {
         "status": "healthy",
         "storage": "in-memory"
@@ -53,10 +77,10 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    
-    host = os.getenv("HOST", "localhost")
+
+    host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", 8000))
-    
+
     uvicorn.run(
         "app.main:app",
         host=host,
