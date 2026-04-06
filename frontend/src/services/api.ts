@@ -8,7 +8,7 @@ import type {
   GrantListItem,
 } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = 'https://ca-grants-backend.ambitioustree-e69e3f81.centralus.azurecontainerapps.io';
 
 const api = axios.create({
   baseURL: API_URL,
