@@ -2,7 +2,8 @@ name: Build and Deploy to Azure
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 env:
@@ -17,9 +18,34 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set image tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA}" >> $GITHUB_ENV
+
+      - name: Show commit being deployed
+        run: |
+          echo "Deploying commit: ${GITHUB_SHA}"
+          git log --oneline -1
+
+      - name: Verify expected files exist
+        run: |
+          test -f frontend/Dockerfile
+          test -f backend/Dockerfile
+          test -f backend/requirements.txt
+          test -f .github/workflows/deploy.yml
+          echo "Required files found."
+
+      - name: Show frontend Dockerfile header
+        run: head -n 12 frontend/Dockerfile
+
+      - name: Confirm backend dependency pin
+        run: grep "langchain-core" backend/requirements.txt
 
       - name: Log in to Azure
         uses: azure/login@v2
@@ -34,27 +60,41 @@ jobs:
           password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Build frontend image
-        run: docker build --no-cache -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest ./frontend
+        run: |
+          docker build \
+            --no-cache \
+            -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }} \
+            -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest \
+            ./frontend
 
       - name: Push frontend image
-        run: docker push ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
+          docker push ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
 
       - name: Build backend image
-        run: docker build --no-cache -t ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest ./backend
+        run: |
+          docker build \
+            --no-cache \
+            -t ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }} \
+            -t ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest \
+            ./backend
 
       - name: Push backend image
-        run: docker push ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
+          docker push ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
 
       - name: Deploy frontend to Container Apps
         uses: azure/container-apps-deploy-action@v1
         with:
           containerAppName: ${{ env.FRONTEND_APP }}
           resourceGroup: ${{ env.RESOURCE_GROUP }}
-          imageToDeploy: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
+          imageToDeploy: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
 
       - name: Deploy backend to Container Apps
         uses: azure/container-apps-deploy-action@v1
         with:
           containerAppName: ${{ env.BACKEND_APP }}
           resourceGroup: ${{ env.RESOURCE_GROUP }}
-          imageToDeploy: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+          imageToDeploy: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
