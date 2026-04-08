@@ -14,8 +14,8 @@ from app.services.privacy_service import PrivacyService
 from app.services.local_extraction_service import LocalExtractionService
 from app.utils.file_helpers import save_uploaded_file, extract_text_from_file, extract_text_from_pdf, generate_file_id
 from typing import Dict, List, Optional
+import io
 import os
-import tempfile
 
 router = APIRouter(prefix="/api/grants", tags=["grants"])
 
@@ -29,27 +29,26 @@ local_extraction_service = LocalExtractionService()
 
 
 def _ocr_pdf_text(filepath: str) -> str:
-    """Run OCR on a scanned PDF and return the extracted text.
+    """OCR a scanned PDF using PyMuPDF (page rendering) + pytesseract.
 
-    Uses ocrmypdf to produce a searchable PDF in a temp file, then extracts
-    the text from that. Returns an empty string if OCR fails for any reason.
+    Renders each page at 2x scale (~144 DPI) and passes the result to
+    Tesseract. This handles both embedded-image PDFs and fully rasterised
+    scans. Returns an empty string if OCR fails for any reason.
     """
     try:
-        import ocrmypdf
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            ocr_path = tmp.name
-        try:
-            ocrmypdf.ocr(
-                filepath,
-                ocr_path,
-                force_ocr=True,        # OCR even if the PDF already has some text
-                progress_bar=False,
-                quiet=True,
-            )
-            return extract_text_from_pdf(ocr_path).strip()
-        finally:
-            if os.path.exists(ocr_path):
-                os.unlink(ocr_path)
+        import fitz  # PyMuPDF
+        import pytesseract
+        from PIL import Image
+
+        doc = fitz.open(filepath)
+        text_parts: list[str] = []
+        mat = fitz.Matrix(2, 2)  # 2× scale ≈ 144 DPI — reliable for Tesseract
+        for page in doc:
+            pix = page.get_pixmap(matrix=mat)
+            img = Image.open(io.BytesIO(pix.tobytes("png")))
+            text_parts.append(pytesseract.image_to_string(img))
+        doc.close()
+        return "\n".join(text_parts).strip()
     except Exception:
         return ""
 

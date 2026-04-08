@@ -1,11 +1,10 @@
 FROM python:3.12-slim
 WORKDIR /app
 
-# Tesseract OCR + Ghostscript (required by ocrmypdf for scanned PDF handling)
+# Tesseract OCR (for scanned PDF fallback via pytesseract)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \
-    ghostscript \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
