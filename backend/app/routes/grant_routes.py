@@ -27,7 +27,14 @@ privacy_service = PrivacyService()
 local_extraction_service = LocalExtractionService()
 
 
-async def _save_and_extract(file: UploadFile, document_type: str) -> tuple[str, str, str]:
+async def _save_and_extract(file: UploadFile, document_type: str) -> tuple[str, str, str, Optional[str]]:
+    """Extract text from an uploaded file.
+
+    Returns (file_id, filename, text, content_warning).
+    content_warning is None when the file looks complete, or a plain-English
+    advisory string when the file is readable but sparse.
+    Raises HTTPException only when the file is truly unreadable or empty.
+    """
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
     ext = os.path.splitext(file.filename)[1].lower()
@@ -35,13 +42,33 @@ async def _save_and_extract(file: UploadFile, document_type: str) -> tuple[str, 
         raise HTTPException(status_code=400, detail=f"Unsupported file type for '{file.filename}'")
     content = await file.read()
     if not content:
-        raise HTTPException(status_code=400, detail=f"File '{file.filename}' is empty")
+        raise HTTPException(status_code=400, detail=f"'{file.filename}' is empty — please check the file and try again")
     file_id = generate_file_id()
     filepath = save_uploaded_file(content, file.filename, file_id)
     text, _ = extract_text_from_file(filepath)
-    if not text or len(text.strip()) < 50:
-        raise HTTPException(status_code=400, detail=f"'{file.filename}' does not contain sufficient readable text")
-    return file_id, file.filename, text
+    stripped = (text or "").strip()
+
+    if len(stripped) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"No readable text could be extracted from '{file.filename}'. "
+                f"This usually means the file is a scanned image without OCR, is password-protected, "
+                f"or is corrupted. Please export the document as a text-based PDF and try again."
+            ),
+        )
+
+    content_warning: Optional[str] = None
+    if len(stripped) < 400:
+        content_warning = (
+            f"'{file.filename}' contains only a small amount of text "
+            f"({len(stripped)} characters), which is typical of a brief award letter or cover page. "
+            f"Extraction will proceed but some fields — such as the work plan, budget breakdown, "
+            f"and detailed timeline — may be incomplete or missing. "
+            f"For the most complete output, upload both the award letter and the original proposal together."
+        )
+
+    return file_id, file.filename, stripped, content_warning
 
 
 def _build_privacy_settings(
@@ -59,7 +86,7 @@ def _build_privacy_settings(
 
 
 async def process_single_file(file: UploadFile, file_num: int, total_files: int) -> UploadResponse:
-    file_id, filename, text = await _save_and_extract(file, "unknown")
+    file_id, filename, text, content_warning = await _save_and_extract(file, "unknown")
     source_documents = [SourceDocument(file_id=file_id, filename=filename, document_type="unknown")]
     settings = PrivacySettings()
     redacted_text, redactions = privacy_service.redact_text(text, settings)
@@ -85,6 +112,7 @@ async def process_single_file(file: UploadFile, file_num: int, total_files: int)
         file_id=file_id,
         filename=filename,
         document_type=grant_data.document_type,
+        content_warning=content_warning,
     )
 
 
@@ -139,12 +167,18 @@ async def upload_grant_package(
     proposal_filename = None
     award_filename = None
 
+    content_warnings: List[str] = []
+
     if proposal:
-        proposal_file_id, proposal_filename, proposal_text = await _save_and_extract(proposal, "proposal")
+        proposal_file_id, proposal_filename, proposal_text, w = await _save_and_extract(proposal, "proposal")
+        if w:
+            content_warnings.append(w)
         source_documents.append(SourceDocument(file_id=proposal_file_id, filename=proposal_filename, document_type="proposal"))
 
     if award_letter:
-        award_file_id, award_filename, award_text = await _save_and_extract(award_letter, "award_letter")
+        award_file_id, award_filename, award_text, w = await _save_and_extract(award_letter, "award_letter")
+        if w:
+            content_warnings.append(w)
         source_documents.append(SourceDocument(file_id=award_file_id, filename=award_filename, document_type="award_letter"))
 
     package_id = generate_file_id()
@@ -208,6 +242,7 @@ async def upload_grant_package(
         award_filename=award_filename,
         used_external_llm=use_external_llm,
         redaction_count=len(redactions),
+        content_warnings=content_warnings,
     )
 
 

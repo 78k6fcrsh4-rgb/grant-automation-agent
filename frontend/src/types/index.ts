@@ -122,6 +122,7 @@ export interface UploadResponse {
   file_id: string;
   filename: string;
   document_type?: 'proposal' | 'award_letter' | 'combined' | 'unknown';
+  content_warning?: string;
 }
 
 export interface PackageUploadResponse {
@@ -134,6 +135,7 @@ export interface PackageUploadResponse {
   award_filename?: string;
   used_external_llm: boolean;
   redaction_count: number;
+  content_warnings?: string[];
 }
 
 export interface GenerateDocumentsRequest {

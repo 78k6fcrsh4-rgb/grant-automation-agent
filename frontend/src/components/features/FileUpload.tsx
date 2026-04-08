@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, CheckCircle, AlertCircle, Shield } from 'lucide-react';
+import { FileText, CheckCircle, AlertCircle, AlertTriangle, Shield } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useUploadGrantPackage } from '../../hooks/useGrants';
 
@@ -17,13 +17,27 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
     enable_external_llm: false,
   });
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [contentWarnings, setContentWarnings] = useState<string[]>([]);
   const uploadMutation = useUploadGrantPackage();
 
   const handleSubmit = async () => {
     if (!proposal && !awardLetter) return;
-    const result = await uploadMutation.mutateAsync({ proposal, awardLetter, settings });
-    setUploadMessage(`${result.message} Redactions detected: ${result.redaction_count}.`);
-    onUploadSuccess([result.package_id]);
+    setUploadError(null);
+    setContentWarnings([]);
+    setUploadMessage(null);
+    try {
+      const result = await uploadMutation.mutateAsync({ proposal, awardLetter, settings });
+      setUploadMessage(`${result.message} Redactions detected: ${result.redaction_count}.`);
+      if (result.content_warnings && result.content_warnings.length > 0) {
+        setContentWarnings(result.content_warnings);
+      }
+      onUploadSuccess([result.package_id]);
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setUploadError(detail || 'Upload failed. Please check your files and try again.');
+    }
   };
 
   const fileCard = (
@@ -94,14 +108,21 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
         </div>
       </div>
 
-      {uploadMutation.isError && (
-        <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">
-          <AlertCircle className="h-4 w-4" />
-          Upload failed.
+      {uploadError && (
+        <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <span>{uploadError}</span>
         </div>
       )}
 
-      {uploadMutation.isSuccess && uploadMessage && (
+      {contentWarnings.map((warning, i) => (
+        <div key={i} className="flex items-start gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-3">
+          <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <span>{warning}</span>
+        </div>
+      ))}
+
+      {uploadMessage && (
         <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md p-3">
           <CheckCircle className="h-4 w-4" />
           {uploadMessage}

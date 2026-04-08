@@ -129,6 +129,7 @@ class UploadResponse(BaseModel):
     file_id: str
     filename: str
     document_type: Optional[DocumentKind] = None
+    content_warning: Optional[str] = None
 
 
 class GenerateDocumentsRequest(BaseModel):
@@ -153,3 +154,4 @@ class PackageUploadResponse(BaseModel):
     award_filename: Optional[str] = None
     used_external_llm: bool = False
     redaction_count: int = 0
+    content_warnings: List[str] = Field(default_factory=list)
