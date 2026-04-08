@@ -12,9 +12,10 @@ from app.services.llm_service import LLMService
 from app.services.document_service import DocumentService
 from app.services.privacy_service import PrivacyService
 from app.services.local_extraction_service import LocalExtractionService
-from app.utils.file_helpers import save_uploaded_file, extract_text_from_file, generate_file_id
+from app.utils.file_helpers import save_uploaded_file, extract_text_from_file, extract_text_from_pdf, generate_file_id
 from typing import Dict, List, Optional
 import os
+import tempfile
 
 router = APIRouter(prefix="/api/grants", tags=["grants"])
 
@@ -27,13 +28,39 @@ privacy_service = PrivacyService()
 local_extraction_service = LocalExtractionService()
 
 
+def _ocr_pdf_text(filepath: str) -> str:
+    """Run OCR on a scanned PDF and return the extracted text.
+
+    Uses ocrmypdf to produce a searchable PDF in a temp file, then extracts
+    the text from that. Returns an empty string if OCR fails for any reason.
+    """
+    try:
+        import ocrmypdf
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            ocr_path = tmp.name
+        try:
+            ocrmypdf.ocr(
+                filepath,
+                ocr_path,
+                force_ocr=True,        # OCR even if the PDF already has some text
+                progress_bar=False,
+                quiet=True,
+            )
+            return extract_text_from_pdf(ocr_path).strip()
+        finally:
+            if os.path.exists(ocr_path):
+                os.unlink(ocr_path)
+    except Exception:
+        return ""
+
+
 async def _save_and_extract(file: UploadFile, document_type: str) -> tuple[str, str, str, Optional[str]]:
     """Extract text from an uploaded file.
 
     Returns (file_id, filename, text, content_warning).
     content_warning is None when the file looks complete, or a plain-English
-    advisory string when the file is readable but sparse.
-    Raises HTTPException only when the file is truly unreadable or empty.
+    advisory string when the file was sparse or needed OCR.
+    Raises HTTPException only when the file is truly unreadable even after OCR.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
@@ -48,18 +75,39 @@ async def _save_and_extract(file: UploadFile, document_type: str) -> tuple[str, 
     text, _ = extract_text_from_file(filepath)
     stripped = (text or "").strip()
 
-    if len(stripped) < 10:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"No readable text could be extracted from '{file.filename}'. "
-                f"This usually means the file is a scanned image without OCR, is password-protected, "
-                f"or is corrupted. Please export the document as a text-based PDF and try again."
-            ),
-        )
-
     content_warning: Optional[str] = None
-    if len(stripped) < 400:
+
+    if len(stripped) < 10:
+        if ext == ".pdf":
+            # Attempt automatic OCR before giving up
+            ocr_text = _ocr_pdf_text(filepath)
+            if len(ocr_text) >= 10:
+                stripped = ocr_text
+                content_warning = (
+                    f"'{file.filename}' appeared to be a scanned image, so OCR was applied automatically. "
+                    f"Text was extracted successfully but may contain minor recognition errors — "
+                    f"please review any dates or dollar amounts in the generated documents."
+                )
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"No readable text could be extracted from '{file.filename}', even after attempting OCR. "
+                        f"This usually means the file is password-protected or corrupted. "
+                        f"Please unlock or repair the file and try again."
+                    ),
+                )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"No readable text could be extracted from '{file.filename}'. "
+                    f"The document appears to be empty or corrupted. "
+                    f"Please check the file and try again."
+                ),
+            )
+
+    if content_warning is None and len(stripped) < 400:
         content_warning = (
             f"'{file.filename}' contains only a small amount of text "
             f"({len(stripped)} characters), which is typical of a brief award letter or cover page. "

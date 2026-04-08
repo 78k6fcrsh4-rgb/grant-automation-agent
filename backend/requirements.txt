@@ -17,6 +17,7 @@ openpyxl==3.1.5
 pypdf==5.0.1
 python-pptx==1.0.2
 reportlab==4.2.5
+ocrmypdf==16.7.0
 
 # Calendar/ICS
 icalendar==6.0.1
