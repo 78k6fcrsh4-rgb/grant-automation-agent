@@ -138,7 +138,7 @@ async def process_single_file(file: UploadFile, file_num: int, total_files: int)
     settings = PrivacySettings()
     redacted_text, redactions = privacy_service.redact_text(text, settings)
     grant_data = local_extraction_service.extract(
-        redacted_text,
+        text,                # Always extract from raw text so redaction never hides amounts or names
         source_documents=source_documents,
         proposal_text=None,
         award_letter_text=None,
@@ -238,7 +238,7 @@ async def upload_grant_package(
 
     redacted_text, redactions = privacy_service.redact_text(merged_text, privacy_settings)
     grant_data = local_extraction_service.extract(
-        redacted_text,
+        merged_text,         # Always extract from raw text so redaction never hides amounts or names
         source_documents=source_documents,
         proposal_text=proposal_text,
         award_letter_text=award_text,

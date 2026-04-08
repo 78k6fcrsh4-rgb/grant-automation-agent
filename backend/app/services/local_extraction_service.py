@@ -17,8 +17,13 @@ from app.models.schemas import (
 
 
 class LocalExtractionService:
+    # Matches: "March 31, 2027" · "March 31 2027" · "2 April 2026" · "31 March" · "12/31/2027"
     date_pattern = re.compile(
-        r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b",
+        r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)"
+        r"\s+\d{1,2},?\s+\d{4}\b"
+        r"|\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August"
+        r"|September|October|November|December)(?:\s+\d{4})?\b"
+        r"|\b\d{1,2}/\d{1,2}/\d{2,4}\b",
         re.IGNORECASE,
     )
     amount_pattern = re.compile(r"\$\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?")
@@ -82,6 +87,36 @@ class LocalExtractionService:
         )
 
     def _extract_org_name(self, lines: List[str]) -> Optional[str]:
+        """Extract the recipient organisation name from award letter or proposal text."""
+        full_text = "\n".join(lines)
+
+        # Address block: line immediately before "Attn:" is the most reliable signal
+        # because OCR often splits multi-word org names across lines.
+        for i, line in enumerate(lines):
+            if re.match(r"Attn[\s:.]", line, re.IGNORECASE) and i > 0:
+                candidate = lines[i - 1].strip()
+                if candidate and not re.search(r"\d{5}", candidate) and len(candidate) > 3:
+                    return candidate[:120]
+
+        # "[Org] has been awarded …" — join adjacent lines so OCR breaks don't matter
+        # Normalise by collapsing newlines to spaces for this search only
+        flat = re.sub(r"\n", " ", full_text)
+        m = re.search(
+            r"([A-Z][A-Za-z &,'./-]{3,}?)\s+has been awarded",
+            flat,
+        )
+        if m:
+            return m.group(1).strip()[:120]
+
+        # "awarded to [Org]" / "grant to [Org]"
+        m = re.search(
+            r"(?:awarded|grant)\s+to\s+([A-Z][A-Za-z &,'./-]+?)(?:\.|,|\s+to\s|\s+in\s|\s+for\s|$)",
+            flat, re.IGNORECASE,
+        )
+        if m:
+            return m.group(1).strip()[:120]
+
+        # Fallback: explicit label
         for line in lines[:20]:
             if re.search(r"organization|grantee|recipient", line, re.IGNORECASE):
                 parts = re.split(r":|-", line, maxsplit=1)
@@ -90,30 +125,106 @@ class LocalExtractionService:
         return None
 
     def _extract_funder(self, lines: List[str]) -> Optional[str]:
+        """Extract the funding organisation name."""
+        full_text = "\n".join(lines)
+
+        # "On behalf of [The] Funder Name, …"
+        m = re.search(
+            r"[Oo]n behalf of\s+(?:[Tt]he\s+)?([A-Z][A-Za-z &,'./-]+?)(?:,|\.\s|\s+[Ii]\s|\s+[Ww]e\s|$)",
+            full_text,
+        )
+        if m:
+            return m.group(1).strip()[:120]
+
+        # Letterhead: first 8 lines containing a common org-type word
+        org_re = re.compile(
+            r"\b(?:Foundation|Fund|Institute|Trust|Association|Corporation|Corp|Inc|LLC"
+            r"|Organization|Society|Council|Group|Agency|University|College|Charitable)\b"
+        )
+        for line in lines[:8]:
+            if org_re.search(line) and 3 < len(line) < 120:
+                return re.sub(r"\s{2,}", " ", line).strip()
+
+        # Fallback: explicit label
         for line in lines[:25]:
-            if re.search(r"funder|foundation|awarded by|grantor", line, re.IGNORECASE):
+            if re.search(r"\bfunder\b|awarded by|grantor", line, re.IGNORECASE):
                 parts = re.split(r":|-", line, maxsplit=1)
                 if len(parts) > 1:
                     return parts[1].strip()[:120]
         return None
 
     def _extract_grant_title(self, lines: List[str]) -> Optional[str]:
+        """Extract the grant or project title."""
+        full_text = "\n".join(lines)
+
+        # "application titled X" / "project titled X" / "titled 'X'"
+        # Stop before continuation phrases like "over a period", "in order to", etc.
+        m = re.search(
+            r'(?:application|project|grant|program)?\s*(?:titled|entitled|called|named)\s*["\u201c]?'
+            r'([^"\u201d\n,\.]{4,80}?)'
+            r'(?=["\u201d]|\s+(?:over|in order|to be|that|which|for a|\$)|$)',
+            full_text, re.IGNORECASE,
+        )
+        if m:
+            return m.group(1).strip()[:160]
+
+        # Explicit label lines
         for line in lines[:30]:
-            if re.search(r"grant title|project title|program title", line, re.IGNORECASE):
+            if re.search(r"grant title|project title|program title|project name", line, re.IGNORECASE):
                 parts = re.split(r":|-", line, maxsplit=1)
                 if len(parts) > 1:
                     return parts[1].strip()[:160]
+
+        # Fallback: short title-cased line near the top
         for line in lines[:10]:
             if 8 < len(line) < 160 and line == line.title():
                 return line
         return None
 
     def _extract_grant_period(self, lines: List[str], dates: List[str]) -> Optional[str]:
+        """Extract the grant term / performance period."""
+        full_text = "\n".join(lines)
+
+        # Explicit label: "grant period:", "period of performance:", etc.
         for line in lines[:80]:
-            if re.search(r"grant period|period of performance|project period", line, re.IGNORECASE):
+            if re.search(r"grant period|period of performance|project period|grant term", line, re.IGNORECASE):
                 return line[:180]
+
+        # "over a period of X year(s) / month(s)"
+        m = re.search(
+            r"over\s+(?:a\s+)?period\s+of\s+(\d+\s+(?:year|month|week)s?)",
+            full_text, re.IGNORECASE,
+        )
+        if m:
+            return m.group(1).strip()
+
+        # "X-year grant" / "X year grant"
+        m = re.search(r"(\d+)[\s-]?year\s+grant", full_text, re.IGNORECASE)
+        if m:
+            return f"{m.group(1)} year"
+
+        # "from DATE to/through/until DATE" or "effective DATE – DATE"
+        m = re.search(
+            r"(?:from|effective)\s+([A-Za-z]+\s+\d{1,2},?\s+\d{4})"
+            r"\s+(?:to|through|until|[-\u2013])\s+"
+            r"([A-Za-z]+\s+\d{1,2},?\s+\d{4})",
+            full_text, re.IGNORECASE,
+        )
+        if m:
+            return f"{m.group(1)} \u2013 {m.group(2)}"
+
+        # "expended by DATE" / "no later than DATE"
+        m = re.search(
+            r"(?:expended\s+by|no\s+later\s+than)\s+"
+            r"(\d{1,2}\s+[A-Za-z]+(?:\s+\d{4})?|[A-Za-z]+\s+\d{1,2},?\s+\d{4})",
+            full_text, re.IGNORECASE,
+        )
+        if m:
+            return f"by {m.group(1).strip()}"
+
+        # Fall back to first two dates found in the document
         if len(dates) >= 2:
-            return f"{dates[0]} - {dates[1]}"
+            return f"{dates[0]} \u2013 {dates[1]}"
         return None
 
     def _extract_timeline(self, lines: List[str]) -> List[TimelineItem]:
