@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HomePage } from './pages/HomePage';
 import { GrantDetailsPage } from './pages/GrantDetailsPage';
 import { GrantListPage } from './pages/GrantListPage';
+import { ExtractionReviewPage } from './pages/ExtractionReviewPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,6 +23,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/grants" element={<GrantListPage />} />
           <Route path="/grant/:fileId" element={<GrantDetailsPage />} />
+          <Route path="/grant/:fileId/review" element={<ExtractionReviewPage />} />
         </Routes>
       </Router>
     </QueryClientProvider>

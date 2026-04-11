@@ -114,6 +114,12 @@ export interface GrantData {
   reporting_requirements?: ReportingRequirement[];
   submission_requirements?: SubmissionRequirement[];
   raw_text: string;
+  // New fields from redesign
+  purpose?: string;
+  grant_name?: string;
+  document_format?: string;
+  extraction_confidence?: Record<string, ExtractionField>;
+  data_gaps?: string[];
 }
 
 export interface UploadResponse {
@@ -145,6 +151,10 @@ export interface GenerateDocumentsRequest {
   generate_report_template?: boolean;
   generate_calendar?: boolean;
   generate_agenda_template?: boolean;
+  generate_summary?: boolean;
+  generate_meeting_calendar?: boolean;
+  generate_disbursement_calendar?: boolean;
+  generate_reporting_calendar?: boolean;
   disbursement_interval_days?: number;
   disbursement_reminder_days?: number;
   meeting_interval_days?: number;
@@ -161,10 +171,33 @@ export interface GenerateDocumentsResponse {
     workplan?: GeneratedDocument;
     budget?: GeneratedDocument;
     report?: GeneratedDocument;
-    calendar?: GeneratedDocument;
     agenda?: GeneratedDocument;
+    summary?: GeneratedDocument;
+    meeting_calendar?: GeneratedDocument;
+    disbursement_calendar?: GeneratedDocument;
+    reporting_calendar?: GeneratedDocument;
+    // legacy
+    calendar?: GeneratedDocument;
   };
   calendar_discrepancy?: string[];
+}
+
+// Extraction confidence for the review page
+export type ExtractionConfidence = 'CONFIRMED' | 'INFERRED' | 'MISSING';
+
+export interface ExtractionField {
+  value?: string | null;
+  confidence: ExtractionConfidence;
+  note?: string | null;
+}
+
+export interface ExtractionConfidenceMap {
+  organization_name?: ExtractionField;
+  funder_name?: ExtractionField;
+  grant_title?: ExtractionField;
+  purpose?: ExtractionField;
+  grant_amount?: ExtractionField;
+  grant_period?: ExtractionField;
 }
 
 export interface GrantListItem {

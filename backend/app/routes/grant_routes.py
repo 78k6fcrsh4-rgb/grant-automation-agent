@@ -330,6 +330,10 @@ async def generate_documents(file_id: str, request: GenerateDocumentsRequest):
         "generate_report_template": request.generate_report_template,
         "generate_calendar": request.generate_calendar,
         "generate_agenda_template": request.generate_agenda_template,
+        "generate_summary": request.generate_summary,
+        "generate_meeting_calendar": request.generate_meeting_calendar,
+        "generate_disbursement_calendar": request.generate_disbursement_calendar,
+        "generate_reporting_calendar": request.generate_reporting_calendar,
         "disbursement_interval_days": request.disbursement_interval_days,
         "disbursement_reminder_days": request.disbursement_reminder_days,
         "meeting_interval_days": request.meeting_interval_days,
@@ -359,8 +363,13 @@ async def download_document(file_id: str, doc_type: str):
         "workplan": ".pdf",
         "budget": ".xlsx",
         "report": ".docx",
-        "calendar": ".ics",
         "agenda": ".docx",
+        "summary": ".docx",
+        "meeting_calendar": ".ics",
+        "disbursement_calendar": ".ics",
+        "reporting_calendar": ".ics",
+        # legacy single-calendar key kept for backward compat
+        "calendar": ".ics",
     }
     if doc_type not in extensions:
         raise HTTPException(status_code=400, detail=f"Invalid document type: {doc_type}")

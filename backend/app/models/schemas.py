@@ -1,8 +1,30 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict
+from enum import Enum
 
 
 DocumentKind = Literal["proposal", "award_letter", "combined", "unknown"]
+
+
+class ExtractionConfidence(str, Enum):
+    CONFIRMED = "confirmed"   # explicit labeled field or very clear pattern
+    INFERRED = "inferred"     # derived from context, could be wrong
+    MISSING = "missing"       # not found in document
+
+
+class ContactInfo(BaseModel):
+    name: Optional[str] = None
+    title: Optional[str] = None
+    organization: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    role: Optional[str] = None  # "program_officer", "grants_officer", "contact", etc.
+
+
+class ExtractionField(BaseModel):
+    value: Optional[str] = None
+    confidence: ExtractionConfidence = ExtractionConfidence.MISSING
+    note: Optional[str] = None  # short note about how it was found or why it's missing
 
 
 class SourceDocument(BaseModel):
@@ -121,6 +143,12 @@ class GrantData(BaseModel):
     reporting_requirements: List[ReportingRequirement] = Field(default_factory=list)
     submission_requirements: List[SubmissionRequirement] = Field(default_factory=list)
     raw_text: str = Field(..., description="Original text")
+    purpose: Optional[str] = None
+    grant_name: Optional[str] = None
+    contacts: List[ContactInfo] = Field(default_factory=list)
+    extraction_confidence: Dict[str, str] = Field(default_factory=dict)
+    data_gaps: List[str] = Field(default_factory=list)
+    document_format: Optional[str] = None
 
 
 class UploadResponse(BaseModel):
@@ -142,6 +170,10 @@ class GenerateDocumentsRequest(BaseModel):
     disbursement_interval_days: int = 30
     disbursement_reminder_days: int = 7
     meeting_interval_days: int = 14
+    generate_summary: bool = True
+    generate_meeting_calendar: bool = True
+    generate_disbursement_calendar: bool = True
+    generate_reporting_calendar: bool = True
 
 
 class PackageUploadResponse(BaseModel):

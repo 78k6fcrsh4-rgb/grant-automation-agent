@@ -832,6 +832,364 @@ class DocumentService:
 
         return discrepancies
 
+    def generate_meeting_calendar_ics(
+        self,
+        grant_data: GrantData,
+        file_id: str,
+        meeting_interval_days: int = 14,
+    ) -> str:
+        """Generate a recurring status-meeting calendar (bi-weekly by default).
+
+        Each event includes a standard agenda template in the DESCRIPTION.
+        Uses RRULE for clean recurrence rather than individual events.
+        """
+        filename = f"{file_id}_meeting_calendar.ics"
+        filepath = os.path.join(self.temp_dir, filename)
+        cal = Calendar()
+        cal.add('prodid', '-//Grant Status Meetings//EN//')
+        cal.add('version', '2.0')
+        cal.add('calscale', 'GREGORIAN')
+        cal.add('method', 'PUBLISH')
+        cal.add('x-wr-calname', f"Meetings: {grant_data.grant_title or 'Grant'}")
+        cal.add('x-wr-timezone', 'America/Chicago')
+
+        start_bound, end_bound = self._grant_period_bounds(grant_data)
+        first_meeting = start_bound.replace(hour=10, minute=0, second=0, microsecond=0)
+
+        title = grant_data.grant_title or "Grant"
+        agenda_description = (
+            f"Status meeting: {title}\n"
+            f"Cadence: every {meeting_interval_days} days\n\n"
+            "AGENDA TEMPLATE\n"
+            "1. Progress against milestones and deliverables\n"
+            "2. Budget vs. actuals review\n"
+            "3. Upcoming reporting deadlines\n"
+            "4. Upcoming disbursement requests\n"
+            "5. Issues, risks, and action items\n"
+            "6. Next steps and owner assignments"
+        )
+
+        from icalendar import vRecur
+        event = Event()
+        event.add('summary', f"Status Meeting: {title}")
+        event.add('dtstart', first_meeting)
+        event.add('dtend', first_meeting + timedelta(minutes=50))
+        event.add('description', agenda_description)
+        event.add('dtstamp', datetime.now())
+        event.add('uid', f"{file_id}-meeting-recurring@grantmanagement.local")
+        event.add('status', 'CONFIRMED')
+        # RRULE: repeat every N days until the end of the grant period
+        event.add('rrule', vRecur(freq='DAILY', interval=meeting_interval_days, until=end_bound))
+        # 10-minute reminder
+        alarm = Alarm()
+        alarm.add('action', 'DISPLAY')
+        alarm.add('description', f"Starting soon: Status Meeting — {title}")
+        alarm.add('trigger', timedelta(minutes=-10))
+        event.add_component(alarm)
+        cal.add_component(event)
+
+        with open(filepath, 'wb') as f:
+            f.write(cal.to_ical())
+        return filepath
+
+    def generate_disbursement_calendar_ics(
+        self,
+        grant_data: GrantData,
+        file_id: str,
+        disbursement_interval_days: int = 30,
+        disbursement_reminder_days: int = 7,
+    ) -> str:
+        """Generate a disbursement / payment request calendar.
+
+        Events are drawn from timeline items in the reimbursement/disbursement/
+        payment categories.  Each event DESCRIPTION includes a checklist of
+        items to complete before submitting the disbursement request.
+        """
+        filename = f"{file_id}_disbursement_calendar.ics"
+        filepath = os.path.join(self.temp_dir, filename)
+        cal = Calendar()
+        cal.add('prodid', '-//Grant Disbursements//EN//')
+        cal.add('version', '2.0')
+        cal.add('calscale', 'GREGORIAN')
+        cal.add('method', 'PUBLISH')
+        cal.add('x-wr-calname', f"Disbursements: {grant_data.grant_title or 'Grant'}")
+        cal.add('x-wr-timezone', 'America/Chicago')
+
+        disbursement_categories = {'reimbursement', 'disbursement', 'submission', 'payment'}
+        default_checklist = (
+            "DISBURSEMENT REQUEST CHECKLIST\n"
+            "□ Supporting invoices/receipts gathered and organised\n"
+            "□ Expenditures reconciled against approved budget lines\n"
+            "□ Budget vs. actuals spreadsheet updated\n"
+            "□ All expenses within the approved grant period\n"
+            "□ Required approvals (finance/programme director) obtained\n"
+            "□ Prior disbursement report filed (if required)\n"
+            "□ Submission portal / email confirmed with funder"
+        )
+
+        event_counter = 0
+        if grant_data.timeline and grant_data.timeline.items:
+            for item in grant_data.timeline.items:
+                if (item.category or '').lower() not in disbursement_categories:
+                    continue
+                event_date = self._parse_date_safe(item.date)
+                if event_date.year >= 2099:
+                    continue
+
+                # Build description with any matching submission requirements
+                matching = [
+                    req.instructions
+                    for req in (grant_data.submission_requirements or [])
+                    if req.due_date and req.instructions
+                    and abs((self._parse_date_safe(req.due_date) - event_date).days) <= disbursement_reminder_days
+                ]
+                desc_parts = [item.description]
+                if item.amount:
+                    desc_parts.append(f"Amount: {item.amount}")
+                if matching:
+                    desc_parts.append("Funder requirements:\n" + "\n".join(f"- {m}" for m in matching))
+                desc_parts.append(default_checklist)
+
+                event = self._build_event(
+                    summary=f"[DISBURSEMENT] {item.description}",
+                    description='\n\n'.join(desc_parts),
+                    start_dt=event_date,
+                    end_dt=event_date + timedelta(days=1),
+                    all_day=True,
+                    alarms=[timedelta(days=-disbursement_reminder_days), timedelta(days=-1)],
+                    uid=f"{file_id}-disb-{event_counter}@grantmanagement.local",
+                )
+                cal.add_component(event)
+                event_counter += 1
+
+        with open(filepath, 'wb') as f:
+            f.write(cal.to_ical())
+        return filepath
+
+    def generate_reporting_calendar_ics(
+        self,
+        grant_data: GrantData,
+        file_id: str,
+        disbursement_reminder_days: int = 7,
+    ) -> str:
+        """Generate a reporting-deadline calendar.
+
+        Draws from both extracted reporting_requirements and timeline items in the
+        'report' category.  Each event DESCRIPTION lists the required report elements.
+        """
+        filename = f"{file_id}_reporting_calendar.ics"
+        filepath = os.path.join(self.temp_dir, filename)
+        cal = Calendar()
+        cal.add('prodid', '-//Grant Reporting Deadlines//EN//')
+        cal.add('version', '2.0')
+        cal.add('calscale', 'GREGORIAN')
+        cal.add('method', 'PUBLISH')
+        cal.add('x-wr-calname', f"Reporting: {grant_data.grant_title or 'Grant'}")
+        cal.add('x-wr-timezone', 'America/Chicago')
+
+        event_counter = 0
+
+        # Primary source: extracted reporting requirements
+        for req in (grant_data.reporting_requirements or []):
+            if not req.due_date:
+                continue
+            event_date = self._parse_date_safe(req.due_date)
+            if event_date.year >= 2099:
+                continue
+
+            elements = req.required_elements or []
+            if elements:
+                elements_text = "REQUIRED REPORT ELEMENTS\n" + "\n".join(f"□ {e}" for e in elements)
+            else:
+                elements_text = (
+                    "STANDARD REPORT ELEMENTS\n"
+                    "□ Progress against project goals and milestones\n"
+                    "□ Budget vs. actuals (with narrative for variances)\n"
+                    "□ Beneficiary/participant data (if required)\n"
+                    "□ Challenges encountered and adaptations made\n"
+                    "□ Planned activities for the next period\n"
+                    "□ Supporting documentation (photos, testimonials, etc.)"
+                )
+
+            period_label = f" ({req.period})" if req.period else ""
+            desc = f"{req.description or 'Progress report'}{period_label}\n\n{elements_text}"
+
+            event = self._build_event(
+                summary=f"[REPORT DUE] {req.description or 'Progress Report'}",
+                description=desc,
+                start_dt=event_date,
+                end_dt=event_date + timedelta(days=1),
+                all_day=True,
+                alarms=[timedelta(days=-14), timedelta(days=-disbursement_reminder_days)],
+                uid=f"{file_id}-report-{event_counter}@grantmanagement.local",
+            )
+            cal.add_component(event)
+            event_counter += 1
+
+        # Secondary source: timeline items categorised as 'report' not already covered
+        seen_dates = set()
+        for item in (grant_data.timeline.items if grant_data.timeline else []):
+            if (item.category or '').lower() != 'report':
+                continue
+            event_date = self._parse_date_safe(item.date)
+            if event_date.year >= 2099 or event_date.date() in seen_dates:
+                continue
+            seen_dates.add(event_date.date())
+
+            desc = (
+                f"{item.description}\n\n"
+                "STANDARD REPORT ELEMENTS\n"
+                "□ Progress against project goals and milestones\n"
+                "□ Budget vs. actuals (with narrative for variances)\n"
+                "□ Challenges encountered and adaptations made\n"
+                "□ Planned activities for the next period"
+            )
+            event = self._build_event(
+                summary=f"[REPORT DUE] {item.description}",
+                description=desc,
+                start_dt=event_date,
+                end_dt=event_date + timedelta(days=1),
+                all_day=True,
+                alarms=[timedelta(days=-14), timedelta(days=-disbursement_reminder_days)],
+                uid=f"{file_id}-report-tl-{event_counter}@grantmanagement.local",
+            )
+            cal.add_component(event)
+            event_counter += 1
+
+        with open(filepath, 'wb') as f:
+            f.write(cal.to_ical())
+        return filepath
+
+    def generate_summary_docx(self, grant_data: GrantData, file_id: str) -> str:
+        """Generate a high-level grant summary Word document.
+
+        Sections:
+        1. Grant Overview (key facts table)
+        2. Project Purpose & Description
+        3. Deliverables & Milestones (timeline items)
+        4. Financial Summary (budget breakdown if available)
+        5. Reporting Obligations
+        6. Data Gaps & Notes
+        """
+        filename = f"{file_id}_grant_summary.docx"
+        filepath = os.path.join(self.temp_dir, filename)
+        doc = Document()
+
+        # ── Styles ──────────────────────────────────────────────────────────────
+        def _h1(text):
+            p = doc.add_heading(text, level=1)
+            p.runs[0].font.color.rgb = RGBColor(0x1A, 0x56, 0xDB)  # blue
+            return p
+
+        def _h2(text):
+            return doc.add_heading(text, level=2)
+
+        def _body(text):
+            p = doc.add_paragraph(text)
+            p.style = doc.styles['Normal']
+            return p
+
+        def _kv_table(rows):
+            """Render a two-column key-value table."""
+            tbl = doc.add_table(rows=len(rows), cols=2)
+            tbl.style = 'Table Grid'
+            for i, (key, val) in enumerate(rows):
+                tbl.rows[i].cells[0].text = key
+                tbl.rows[i].cells[1].text = str(val) if val else "—"
+                tbl.rows[i].cells[0].paragraphs[0].runs[0].bold = True
+            return tbl
+
+        title = grant_data.grant_title or "Grant"
+        org = grant_data.organization_name or "Your Organization"
+        funder = grant_data.funder_name or "Funder"
+
+        # Cover heading
+        doc.add_heading(f"Grant Summary", 0)
+        _body(f"{org}  ·  {funder}  ·  {title}")
+        doc.add_paragraph()
+
+        # ── 1. Grant Overview ────────────────────────────────────────────────
+        _h1("1. Grant Overview")
+        overview_rows = [
+            ("Organization", grant_data.organization_name),
+            ("Funder", grant_data.funder_name),
+            ("Grant Title / Project", grant_data.grant_title),
+            ("Grant Amount", f"${grant_data.grant_amount:,.2f}" if grant_data.grant_amount else None),
+            ("Grant Period", grant_data.grant_period),
+            ("Document Type", (grant_data.document_format or "").replace("_", " ").title()),
+        ]
+        _kv_table(overview_rows)
+        doc.add_paragraph()
+
+        # ── 2. Purpose ───────────────────────────────────────────────────────
+        if grant_data.purpose:
+            _h1("2. Project Purpose")
+            _body(grant_data.purpose)
+            doc.add_paragraph()
+
+        # ── 3. Deliverables & Milestones ────────────────────────────────────
+        section_num = 3
+        timeline_items = (grant_data.timeline.items if grant_data.timeline else []) or []
+        _h1(f"{section_num}. Deliverables & Milestones")
+        if timeline_items:
+            tbl = doc.add_table(rows=1 + len(timeline_items), cols=3)
+            tbl.style = 'Table Grid'
+            hdr = tbl.rows[0].cells
+            hdr[0].text, hdr[1].text, hdr[2].text = "Date", "Category", "Description"
+            for cell in hdr:
+                cell.paragraphs[0].runs[0].bold = True
+            for i, item in enumerate(timeline_items, 1):
+                tbl.rows[i].cells[0].text = item.date or ""
+                tbl.rows[i].cells[1].text = (item.category or "").title()
+                tbl.rows[i].cells[2].text = item.description or ""
+        else:
+            _body("No specific milestones were extracted from the grant documents.")
+        doc.add_paragraph()
+
+        # ── 4. Financial Summary ─────────────────────────────────────────────
+        section_num += 1
+        _h1(f"{section_num}. Financial Summary")
+        if grant_data.grant_amount:
+            _body(f"Total Award: ${grant_data.grant_amount:,.2f}")
+        if grant_data.budget and grant_data.budget.items:
+            budget_rows = [(item.category, f"${item.amount:,.2f}" if item.amount else "—") for item in grant_data.budget.items]
+            _kv_table(budget_rows)
+        else:
+            _body("Detailed budget breakdown not extracted — refer to the original award documents.")
+        doc.add_paragraph()
+
+        # ── 5. Reporting Obligations ─────────────────────────────────────────
+        section_num += 1
+        _h1(f"{section_num}. Reporting Obligations")
+        reporting = grant_data.reporting_requirements or []
+        if reporting:
+            for req in reporting:
+                label = req.description or "Progress Report"
+                due = f" — due {req.due_date}" if req.due_date else ""
+                period = f" ({req.period})" if req.period else ""
+                p = doc.add_paragraph(style='List Bullet')
+                p.add_run(f"{label}{period}{due}").bold = False
+                if req.required_elements:
+                    for el in req.required_elements:
+                        sub = doc.add_paragraph(style='List Bullet 2')
+                        sub.text = el
+        else:
+            _body("No specific reporting requirements were found in the grant documents.")
+        doc.add_paragraph()
+
+        # ── 6. Data Gaps ─────────────────────────────────────────────────────
+        section_num += 1
+        gaps = grant_data.data_gaps or []
+        if gaps:
+            _h1(f"{section_num}. Data Gaps & Recommended Follow-Up")
+            for gap in gaps:
+                p = doc.add_paragraph(style='List Bullet')
+                p.text = gap
+            doc.add_paragraph()
+
+        doc.save(filepath)
+        return filepath
+
     def generate_calendar_ics(
         self,
         grant_data: GrantData,
@@ -840,99 +1198,14 @@ class DocumentService:
         disbursement_reminder_days: int = 7,
         meeting_interval_days: int = 14,
     ) -> tuple[str, List[str]]:
-        """Generate a calendar with deadlines, configurable reminders, and status meetings.
-
-        Returns a tuple of (filepath, discrepancies) where discrepancies is a list of
-        human-readable strings describing mismatches between disbursement events and
-        submission requirements.
+        """Legacy combined-calendar generator kept for backward compatibility.
+        Delegates to the three separate generators and returns the meeting calendar path.
         """
-        master_filename = f"{file_id}_calendar_ALL.ics"
-        master_filepath = os.path.join(self.temp_dir, master_filename)
-        cal = Calendar()
-        cal.add('prodid', '-//Grant Management Calendar//EN//')
-        cal.add('version', '2.0')
-        cal.add('calscale', 'GREGORIAN')
-        cal.add('method', 'PUBLISH')
-        cal.add('x-wr-calname', f"Grant: {grant_data.grant_title or 'All Events'}")
-        cal.add('x-wr-timezone', 'America/Chicago')
-
-        event_counter = 0
-        if grant_data.timeline and grant_data.timeline.items:
-            for item in grant_data.timeline.items:
-                event_date = self._parse_date_safe(item.date)
-                if event_date.year >= 2099:
-                    continue
-                category = (item.category or 'deadline').lower()
-
-                description_parts = [item.description]
-                if item.notes:
-                    description_parts.append(f"Notes: {item.notes}")
-                if item.amount:
-                    description_parts.append(f"Amount: {item.amount}")
-
-                # Embed matching submission requirement instructions in event notes
-                matching_instructions = [
-                    req.instructions
-                    for req in (grant_data.submission_requirements or [])
-                    if req.due_date
-                    and req.instructions
-                    and abs((self._parse_date_safe(req.due_date) - event_date).days)
-                    <= disbursement_reminder_days
-                ]
-                if matching_instructions:
-                    description_parts.append(
-                        "Submission requirements:\n"
-                        + "\n".join(f"- {instr}" for instr in matching_instructions)
-                    )
-                elif category in {'reimbursement', 'disbursement', 'submission', 'report'}:
-                    description_parts.append(
-                        'Submission checklist: confirm supporting documentation, '
-                        'budget line alignment, and approval status before filing.'
-                    )
-
-                # Configurable lead-time reminder for financial/submission events
-                if category in {'reimbursement', 'disbursement', 'submission', 'report'}:
-                    alarms = [timedelta(days=-disbursement_reminder_days), timedelta(days=1)]
-                else:
-                    alarms = [timedelta(days=-1)]
-
-                event = self._build_event(
-                    summary=f"[{category.upper()}] {item.description}",
-                    description='\n'.join(description_parts),
-                    start_dt=event_date,
-                    end_dt=event_date + timedelta(days=1),
-                    all_day=True,
-                    alarms=alarms,
-                    uid=f"{file_id}-{category}-{event_counter}@grantmanagement.local",
-                )
-                cal.add_component(event)
-                event_counter += 1
-
-        # Recurring status meetings spaced by configurable interval
-        start_bound, end_bound = self._grant_period_bounds(grant_data)
-        meeting_cursor = start_bound.replace(hour=10, minute=0, second=0, microsecond=0)
-        while meeting_cursor <= end_bound:
-            event = self._build_event(
-                summary=f"Status Update: {grant_data.grant_title or 'Grant'}",
-                description=(
-                    f"{meeting_interval_days}-day status meeting. "
-                    "Review milestones, spending, reporting readiness, and next actions."
-                ),
-                start_dt=meeting_cursor,
-                end_dt=meeting_cursor + timedelta(minutes=50),
-                all_day=False,
-                alarms=[timedelta(minutes=-10)],
-                uid=f"{file_id}-status-{event_counter}@grantmanagement.local",
-            )
-            cal.add_component(event)
-            event_counter += 1
-            meeting_cursor += timedelta(days=meeting_interval_days)
-
-        with open(master_filepath, 'wb') as f:
-            f.write(cal.to_ical())
-
+        self.generate_disbursement_calendar_ics(grant_data, file_id, disbursement_interval_days, disbursement_reminder_days)
+        self.generate_reporting_calendar_ics(grant_data, file_id, disbursement_reminder_days)
+        meeting_path = self.generate_meeting_calendar_ics(grant_data, file_id, meeting_interval_days)
         discrepancies = self._detect_calendar_discrepancies(grant_data, disbursement_reminder_days)
-        return master_filepath, discrepancies
+        return meeting_path, discrepancies
 
     def _parse_date_safe(self, date_str: str) -> datetime:
         """Safely parse various date formats"""
@@ -1023,22 +1296,55 @@ class DocumentService:
                 print(f"  ❌ Report template error: {e}")
                 generated_files['report_error'] = str(e)
 
-        if options.get('generate_calendar', True):
+        if options.get('generate_summary', True):
             try:
-                print("  📅 Generating calendar ICS file...")
-                filepath, discrepancies = self.generate_calendar_ics(
-                    grant_data,
-                    file_id,
-                    disbursement_interval_days=options.get('disbursement_interval_days', 30),
-                    disbursement_reminder_days=options.get('disbursement_reminder_days', 7),
+                print("  📄 Generating grant summary DOCX...")
+                generated_files['summary'] = self.generate_summary_docx(grant_data, file_id)
+                print("  ✓ Grant summary created")
+            except Exception as e:
+                print(f"  ❌ Summary error: {e}")
+                generated_files['summary_error'] = str(e)
+
+        disbursement_reminder_days = options.get('disbursement_reminder_days', 7)
+
+        if options.get('generate_meeting_calendar', options.get('generate_calendar', True)):
+            try:
+                print("  📅 Generating meeting calendar ICS...")
+                generated_files['meeting_calendar'] = self.generate_meeting_calendar_ics(
+                    grant_data, file_id,
                     meeting_interval_days=options.get('meeting_interval_days', 14),
                 )
-                generated_files['calendar'] = filepath
-                generated_files['calendar_discrepancy'] = discrepancies
-                print(f"  ✓ Calendar created ({len(discrepancies)} discrepancy notice(s))")
+                print("  ✓ Meeting calendar created")
             except Exception as e:
-                print(f"  ❌ Calendar error: {e}")
-                generated_files['calendar_error'] = str(e)
+                print(f"  ❌ Meeting calendar error: {e}")
+                generated_files['meeting_calendar_error'] = str(e)
+
+        if options.get('generate_disbursement_calendar', options.get('generate_calendar', True)):
+            try:
+                print("  📅 Generating disbursement calendar ICS...")
+                generated_files['disbursement_calendar'] = self.generate_disbursement_calendar_ics(
+                    grant_data, file_id,
+                    disbursement_interval_days=options.get('disbursement_interval_days', 30),
+                    disbursement_reminder_days=disbursement_reminder_days,
+                )
+                print("  ✓ Disbursement calendar created")
+            except Exception as e:
+                print(f"  ❌ Disbursement calendar error: {e}")
+                generated_files['disbursement_calendar_error'] = str(e)
+
+        if options.get('generate_reporting_calendar', options.get('generate_calendar', True)):
+            try:
+                print("  📅 Generating reporting calendar ICS...")
+                generated_files['reporting_calendar'] = self.generate_reporting_calendar_ics(
+                    grant_data, file_id,
+                    disbursement_reminder_days=disbursement_reminder_days,
+                )
+                discrepancies = self._detect_calendar_discrepancies(grant_data, disbursement_reminder_days)
+                generated_files['calendar_discrepancy'] = discrepancies
+                print(f"  ✓ Reporting calendar created ({len(discrepancies)} discrepancy notice(s))")
+            except Exception as e:
+                print(f"  ❌ Reporting calendar error: {e}")
+                generated_files['reporting_calendar_error'] = str(e)
 
         print("✓ Document generation complete\n")
 

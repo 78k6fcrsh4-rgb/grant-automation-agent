@@ -8,10 +8,10 @@ export const HomePage: React.FC = () => {
   const navigate = useNavigate();
 
   const handleUploadSuccess = (fileIds: string[]) => {
-    // If multiple files, go to grants list
-    // If single file, go directly to grant details
+    // Single file → go to extraction review page
+    // Multiple files → go to grants list
     if (fileIds.length === 1) {
-      navigate(`/grant/${fileIds[0]}`);
+      navigate(`/grant/${fileIds[0]}/review`);
     } else if (fileIds.length > 1) {
       navigate('/grants');
     }
@@ -19,24 +19,24 @@ export const HomePage: React.FC = () => {
 
   const features = [
     {
-      icon: FileText,
-      title: 'Work Plans',
-      description: 'Generate professional work plan PDFs with timelines and deliverables',
-    },
-    {
       icon: BarChart,
-      title: 'Budget Templates',
-      description: 'Create detailed budget spreadsheets with disbursement schedules',
+      title: 'Grant Summary',
+      description: 'High-level Word document: overview, milestones, financials, and reporting obligations',
     },
     {
       icon: TrendingUp,
-      title: 'Progress Reports',
-      description: 'Build comprehensive report templates for tracking grant progress',
+      title: 'Budget & Disbursement',
+      description: 'Excel spreadsheet with budget breakdown and disbursement schedule',
+    },
+    {
+      icon: FileText,
+      title: 'Word Templates',
+      description: 'Reporting template driven by extracted requirements; status meeting agenda',
     },
     {
       icon: Calendar,
-      title: 'Calendar Events',
-      description: 'Export deadlines and milestones as .ics calendar files',
+      title: 'Three Calendar Files',
+      description: 'Separate ICS files for status meetings, disbursements (with checklist), and reporting deadlines',
     },
   ];
 
@@ -64,7 +64,7 @@ export const HomePage: React.FC = () => {
         {/* Features Grid */}
         <div className="mb-12">
           <h2 className="text-2xl font-bold text-gray-900 text-center mb-8">
-            What We Generate For You
+            Four Categories of Outputs
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((feature, index) => {
