@@ -4,6 +4,8 @@ import { FileUpload } from '../components/features/FileUpload';
 import { Card } from '../components/ui/Card';
 import { FileText, TrendingUp, Calendar, BarChart } from 'lucide-react';
 
+const APP_VERSION: string = (import.meta.env.VITE_APP_VERSION as string) ?? '2.3.0';
+
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
 
@@ -45,9 +47,14 @@ export const HomePage: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Grant Automation Platform (Local V2)
-          </h1>
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <h1 className="text-4xl font-bold text-gray-900">
+              Grant Automation Platform
+            </h1>
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-primary-100 text-primary-700 border border-primary-200 self-center">
+              v{APP_VERSION}
+            </span>
+          </div>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
             Transform proposals and award letters into local-first work plans, privacy-reviewed extraction summaries, and downloadable grant operations templates
           </p>
