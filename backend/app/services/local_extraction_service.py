@@ -58,6 +58,13 @@ class LocalExtractionService:
             purpose, purpose_confidence = self._extract_purpose_federal(lines, text)
             grant_name, grant_name_confidence = self._extract_grant_name_federal(lines)
             reporting_requirements = self._extract_reporting_federal(lines)
+        elif document_format == "grant_agreement":
+            organization_name, org_confidence = self._extract_grantee_grant_agreement(lines)
+            funder_name, funder_confidence = self._extract_funder_grant_agreement(lines)
+            grant_title, title_confidence = self._extract_grant_title_grant_agreement(lines, text)
+            purpose, purpose_confidence = self._extract_purpose_grant_agreement(lines, text)
+            grant_name, grant_name_confidence = grant_title, title_confidence
+            reporting_requirements = self._extract_reporting_letter(lines)
         elif document_format == "contract":
             organization_name, org_confidence = self._extract_grantee_contract(lines)
             funder_name, funder_confidence = self._extract_funder_contract(lines)
@@ -141,11 +148,17 @@ class LocalExtractionService:
         )
 
     def _detect_document_format(self, text: str) -> str:
-        """Detect document format: federal_noa, contract, or letter."""
+        """Detect document format: federal_noa, grant_agreement, contract, or letter."""
         text_upper = text.upper()
 
         if "NOTICE OF AWARD" in text_upper or "FEDERAL AWARD ID" in text_upper or "FAIN" in text_upper:
             return "federal_noa"
+
+        # Grant agreements: explicit GRANTEE/GRANTOR labels, or BETWEEN/AND structure
+        if (("GRANTEE:" in text_upper and "GRANTOR:" in text_upper)
+                or "(GRANTEE)" in text_upper
+                or ("BETWEEN" in text_upper and "GRANTOR" in text_upper)):
+            return "grant_agreement"
 
         if "DELEGATE AGENCY:" in text_upper or "RELEASE PACKAGE" in text_upper or "PURCHASE ORDER NUMBER:" in text_upper:
             return "contract"
@@ -384,43 +397,86 @@ class LocalExtractionService:
 
     def _extract_grantee_federal(self, lines: List[str]) -> Tuple[Optional[str], ExtractionConfidence]:
         """Extract grantee from federal NOA format."""
-        # Same as letter: address block before Attn:
+        # 1. Address block before Attn:
         for i, line in enumerate(lines):
             if re.match(r"Attn[\s:.]", line, re.IGNORECASE) and i > 0:
                 candidate = lines[i - 1].strip()
                 if candidate and not re.search(r"\d{5}", candidate) and len(candidate) > 3:
                     return (candidate[:120], ExtractionConfidence.CONFIRMED)
 
+        # 2. GAN/NOA labels: "RECIPIENT NAME" / "GRANTEE NAME:" (label on one line, value on next)
+        for i, line in enumerate(lines):
+            if re.match(r"^\s*(?:RECIPIENT\s+NAME|GRANTEE\s+NAME)\s*:?\s*$", line, re.IGNORECASE):
+                if i + 1 < len(lines):
+                    candidate = lines[i + 1].strip()
+                    if candidate and len(candidate) > 3 and not re.match(r"^\d+$", candidate):
+                        return (candidate[:120], ExtractionConfidence.CONFIRMED)
+            elif re.match(r"^\s*(?:RECIPIENT\s+NAME|GRANTEE\s+NAME)\s*:", line, re.IGNORECASE):
+                parts = line.split(":", 1)
+                val = parts[1].strip() if len(parts) > 1 else ""
+                if val and len(val) > 3:
+                    return (val[:120], ExtractionConfidence.CONFIRMED)
+
+        # 3. Address block before "Dear" — pattern: Name+Title, ORG NAME, Street, City/State
+        #    Walk backwards from "Dear" skipping address lines to find the org name
+        _org_words_re = re.compile(
+            r"\b(?:Inc|LLC|Foundation|Services|Center|Institute|Council|Association"
+            r"|Network|Consortium|Clinic|Health|Agency|Corp|School|University|College)\b",
+            re.IGNORECASE,
+        )
+        for i, line in enumerate(lines):
+            if re.match(r"Dear\b", line, re.IGNORECASE) and i >= 3:
+                for k in range(i - 1, max(i - 10, -1), -1):
+                    candidate = lines[k].strip()
+                    if not candidate:
+                        continue
+                    if re.search(r"\d{5}", candidate):  # zip code line
+                        continue
+                    if re.search(r"^\d+\s+[A-Z]", candidate):  # street number
+                        continue
+                    # Skip "Name, Title" lines
+                    if re.search(
+                        r",\s*(?:Director|Officer|Manager|Coordinator|Administrator"
+                        r"|President|Chief|Dr\b|PhD|Executive|Superintendent)",
+                        candidate, re.IGNORECASE,
+                    ):
+                        continue
+                    if _org_words_re.search(candidate):
+                        return (candidate[:120], ExtractionConfidence.CONFIRMED)
+                break
+
         # Fallback to letter method
         return self._extract_grantee_letter(lines)
 
     def _extract_funder_federal(self, lines: List[str], text: str) -> Tuple[Optional[str], ExtractionConfidence]:
         """Extract funder from federal NOA format — signature block org is most precise."""
-        # 1. Signature block — org line after name and title (most specific)
-        sig_re = re.compile(r"\b(?:Respectfully|Sincerely|Regards)\b", re.IGNORECASE)
+        # 1. Signature block — keyword must START the line (re.match) to avoid mid-doc false matches
+        sig_re = re.compile(r"^\s*(?:Respectfully|Sincerely|Regards)\b", re.IGNORECASE)
         dept_re = re.compile(r"\b(?:Department|Administration|Agency|Office|Services|Bureau|Commission)\b", re.IGNORECASE)
         for i, line in enumerate(lines):
-            if sig_re.search(line):
+            if sig_re.match(line):
                 for j in range(i + 2, min(i + 7, len(lines))):
                     candidate = lines[j].strip()
                     if dept_re.search(candidate) and 5 < len(candidate) < 120:
                         return (candidate, ExtractionConfidence.CONFIRMED)
 
-        # 2. Specific known federal agencies mentioned anywhere in the document
+        # 2. Specific known federal agencies — search HEADER area only (first 40 lines)
+        #    to avoid matching boilerplate references mid-document
         specific_agencies = [
             "Administration for Community Living",
             "Administration for Children and Families",
+            "Substance Abuse and Mental Health Services Administration",
             "Centers for Disease Control",
             "National Institutes of Health",
-            "Department of Health and Human Services",
             "Department of Education",
+            "Department of Health and Human Services",
             "Department of Housing and Urban Development",
             "Department of Justice",
             "Department of Labor",
         ]
-        flat = re.sub(r"\n", " ", text)
+        header_text = "\n".join(lines[:50]).lower()
         for agency in specific_agencies:
-            if agency.lower() in flat.lower():
+            if agency.lower() in header_text:
                 return (agency, ExtractionConfidence.CONFIRMED)
 
         # 3. Header department lines (first 10 lines)
@@ -527,11 +583,16 @@ class LocalExtractionService:
 
     def _extract_grantee_contract(self, lines: List[str]) -> Tuple[Optional[str], ExtractionConfidence]:
         """Extract grantee from contract format (Delegate Agency field)."""
-        for line in lines:
+        for i, line in enumerate(lines):
             if re.search(r"delegate agency:", line, re.IGNORECASE):
                 parts = re.split(r":|-", line, maxsplit=1)
-                if len(parts) > 1:
+                if len(parts) > 1 and parts[1].strip():
                     return (parts[1].strip()[:120], ExtractionConfidence.CONFIRMED)
+                # Value may be on the next line (OCR/layout split)
+                if i + 1 < len(lines):
+                    next_val = lines[i + 1].strip()
+                    if next_val and len(next_val) > 3 and not re.match(r"^\d+$", next_val):
+                        return (next_val[:120], ExtractionConfidence.CONFIRMED)
 
         return (None, ExtractionConfidence.MISSING)
 
@@ -574,6 +635,105 @@ class LocalExtractionService:
                     return (parts[1].strip()[:200], ExtractionConfidence.CONFIRMED)
 
         return (None, ExtractionConfidence.MISSING)
+
+    # ===== GRANT AGREEMENT FORMAT EXTRACTORS =====
+
+    def _extract_grantee_grant_agreement(self, lines: List[str]) -> Tuple[Optional[str], ExtractionConfidence]:
+        """Extract grantee from grant agreement format.
+
+        Handles:
+          - Explicit GRANTEE: label (MacArthur-style, CCT-style)
+          - "(Grantee)" inline marker (IYIP-style state agreements)
+          - BETWEEN … AND … structure (state contracts)
+        """
+        # 1. GRANTEE: label — value inline or on next line
+        for i, line in enumerate(lines):
+            if re.match(r"^\s*GRANTEE\s*:", line, re.IGNORECASE):
+                parts = line.split(":", 1)
+                val = parts[1].strip() if len(parts) > 1 else ""
+                if not val and i + 1 < len(lines):
+                    val = lines[i + 1].strip()
+                if val and len(val) > 3 and not re.match(r"^\d+$", val):
+                    return (val[:120], ExtractionConfidence.CONFIRMED)
+
+        # 2. "(Grantee)" inline — the preceding text on the line is the org name
+        for line in lines:
+            m = re.search(r"([A-Z][A-Za-z &,'.]+?)\s*\(Grantee\)", line)
+            if m:
+                candidate = m.group(1).strip().rstrip(",")
+                if len(candidate) > 4:
+                    return (candidate[:120], ExtractionConfidence.CONFIRMED)
+
+        # 3. BETWEEN … AND … structure — grantee follows the "AND" separator
+        for i, line in enumerate(lines):
+            if re.match(r"^\s*BETWEEN\s*$", line.strip(), re.IGNORECASE):
+                for j in range(i + 1, min(i + 25, len(lines))):
+                    if re.match(r"^\s*AND\s*$", lines[j].strip(), re.IGNORECASE):
+                        # Skip blank lines and page-number-only lines after AND
+                        for k in range(j + 1, min(j + 10, len(lines))):
+                            candidate = lines[k].strip()
+                            if not candidate or re.match(r"^\d+$", candidate):
+                                continue
+                            return (candidate[:120], ExtractionConfidence.CONFIRMED)
+                        break
+
+        # Fallback
+        return self._extract_grantee_letter(lines)
+
+    def _extract_funder_grant_agreement(self, lines: List[str]) -> Tuple[Optional[str], ExtractionConfidence]:
+        """Extract funder/grantor from grant agreement format."""
+        # 1. GRANTOR: label — value inline or on next line
+        for i, line in enumerate(lines):
+            if re.match(r"^\s*GRANTOR\s*:", line, re.IGNORECASE):
+                parts = line.split(":", 1)
+                val = parts[1].strip() if len(parts) > 1 else ""
+                if not val and i + 1 < len(lines):
+                    val = lines[i + 1].strip()
+                if val and len(val) > 3 and not re.match(r"^\d+$", val):
+                    return (val[:120], ExtractionConfidence.CONFIRMED)
+
+        # 2. "(Grantor)" inline
+        for line in lines:
+            m = re.search(r"([A-Z][A-Za-z &,'.]+?)\s*\(Grantor\)", line)
+            if m:
+                candidate = m.group(1).strip().rstrip(",")
+                if len(candidate) > 4:
+                    return (candidate[:120], ExtractionConfidence.CONFIRMED)
+
+        # 3. BETWEEN … AND … structure — grantor is the party named AFTER "BETWEEN"
+        for i, line in enumerate(lines):
+            if re.match(r"^\s*BETWEEN\s*$", line.strip(), re.IGNORECASE):
+                for j in range(i + 1, min(i + 5, len(lines))):
+                    candidate = lines[j].strip()
+                    if not candidate or re.match(r"^\d+$", candidate):
+                        continue
+                    return (candidate[:120], ExtractionConfidence.CONFIRMED)
+
+        # Fallback
+        return self._extract_funder_letter(lines, "\n".join(lines))
+
+    def _extract_grant_title_grant_agreement(self, lines: List[str], text: str) -> Tuple[Optional[str], ExtractionConfidence]:
+        """Extract grant/program title from grant agreement format."""
+        for i, line in enumerate(lines):
+            if re.search(r"grant name:|program name:|project name:|grant title:", line, re.IGNORECASE):
+                parts = re.split(r":", line, maxsplit=1)
+                val = parts[1].strip() if len(parts) > 1 else ""
+                if not val and i + 1 < len(lines):
+                    val = lines[i + 1].strip()
+                if val and len(val) > 3:
+                    return (val[:160], ExtractionConfidence.CONFIRMED)
+
+        # Fallback to letter method
+        return self._extract_grant_title_letter(lines, text)
+
+    def _extract_purpose_grant_agreement(self, lines: List[str], text: str) -> Tuple[Optional[str], ExtractionConfidence]:
+        """Extract purpose from grant agreement format."""
+        for line in lines:
+            if re.search(r"purpose:", line, re.IGNORECASE):
+                parts = re.split(r":|-", line, maxsplit=1)
+                if len(parts) > 1 and parts[1].strip():
+                    return (parts[1].strip()[:200], ExtractionConfidence.CONFIRMED)
+        return self._extract_purpose_letter(lines, text)
 
     # ===== COMMON EXTRACTORS =====
 
@@ -833,7 +993,7 @@ class LocalExtractionService:
             gaps.append("Grant period not found — no explicit dates or duration mentioned")
 
         if not reporting_requirements:
-            if document_format in ("letter", None):
+            if document_format in ("letter", "grant_agreement", None):
                 gaps.append("Reporting requirements not found — letter does not mention reporting obligations")
             elif document_format == "federal_noa":
                 gaps.append("Reporting requirements not found — no REPORTING REQUIREMENTS section detected")
