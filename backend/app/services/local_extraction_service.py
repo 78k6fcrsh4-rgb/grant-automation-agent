@@ -50,39 +50,88 @@ class LocalExtractionService:
         amount_candidates = self._unique(self.amount_pattern.findall(text))[:12]
         lines = [line.strip() for line in text.splitlines() if line.strip()]
 
-        # Extract based on document format
-        if document_format == "federal_noa":
-            organization_name, org_confidence = self._extract_grantee_federal(lines)
-            funder_name, funder_confidence = self._extract_funder_federal(lines, text)
-            grant_title, title_confidence = self._extract_grant_title_federal(lines)
-            purpose, purpose_confidence = self._extract_purpose_federal(lines, text)
-            grant_name, grant_name_confidence = self._extract_grant_name_federal(lines)
-            reporting_requirements = self._extract_reporting_federal(lines)
-        elif document_format == "grant_agreement":
-            organization_name, org_confidence = self._extract_grantee_grant_agreement(lines)
-            funder_name, funder_confidence = self._extract_funder_grant_agreement(lines)
-            grant_title, title_confidence = self._extract_grant_title_grant_agreement(lines, text)
-            purpose, purpose_confidence = self._extract_purpose_grant_agreement(lines, text)
+        # When a package (proposal + award letter) was uploaded, run the authoritative
+        # field extractors on the award letter text in isolation first.  The award
+        # letter is the final agreed document, so its values for grantee, funder,
+        # amount and period override anything found in the proposal.
+        # Proposal text is used only to fill gaps the award letter doesn't address
+        # (purpose narrative, detailed reporting schedule, program description).
+        _award_lines: Optional[List[str]] = None
+        if award_letter_text:
+            _award_lines = [l.strip() for l in award_letter_text.splitlines() if l.strip()]
+            _award_format = self._detect_document_format(award_letter_text)
+        else:
+            _award_format = document_format
+
+        # auth_lines/auth_text: award letter in isolation (if provided) so its values
+        # for grantee, funder, title and period take priority over the proposal.
+        # For single-file uploads, auth_* == lines/text so behaviour is unchanged.
+        auth_lines = _award_lines if _award_lines is not None else lines
+        auth_text  = award_letter_text if award_letter_text else text
+        auth_fmt   = _award_format if _award_lines is not None else document_format
+
+        # Extract authoritative fields (party names, title) from the award letter only
+        if auth_fmt == "federal_noa":
+            organization_name, org_confidence = self._extract_grantee_federal(auth_lines)
+            funder_name, funder_confidence   = self._extract_funder_federal(auth_lines, auth_text)
+            grant_title, title_confidence    = self._extract_grant_title_federal(auth_lines)
+            grant_name, grant_name_confidence = self._extract_grant_name_federal(auth_lines)
+        elif auth_fmt == "grant_agreement":
+            organization_name, org_confidence = self._extract_grantee_grant_agreement(auth_lines)
+            funder_name, funder_confidence   = self._extract_funder_grant_agreement(auth_lines)
+            grant_title, title_confidence    = self._extract_grant_title_grant_agreement(auth_lines, auth_text)
             grant_name, grant_name_confidence = grant_title, title_confidence
-            reporting_requirements = self._extract_reporting_letter(lines)
-        elif document_format == "contract":
-            organization_name, org_confidence = self._extract_grantee_contract(lines)
-            funder_name, funder_confidence = self._extract_funder_contract(lines)
-            grant_title, title_confidence = self._extract_grant_title_contract(lines)
-            purpose, purpose_confidence = self._extract_purpose_contract(lines, text)
+        elif auth_fmt == "contract":
+            organization_name, org_confidence = self._extract_grantee_contract(auth_lines)
+            funder_name, funder_confidence   = self._extract_funder_contract(auth_lines)
+            grant_title, title_confidence    = self._extract_grant_title_contract(auth_lines)
             grant_name, grant_name_confidence = grant_title, title_confidence
-            reporting_requirements = []
         else:  # letter format (default)
-            organization_name, org_confidence = self._extract_grantee_letter(lines)
-            funder_name, funder_confidence = self._extract_funder_letter(lines, text)
-            grant_title, title_confidence = self._extract_grant_title_letter(lines, text)
-            purpose, purpose_confidence = self._extract_purpose_letter(lines, text)
+            organization_name, org_confidence = self._extract_grantee_letter(auth_lines)
+            funder_name, funder_confidence   = self._extract_funder_letter(auth_lines, auth_text)
+            grant_title, title_confidence    = self._extract_grant_title_letter(auth_lines, auth_text)
             grant_name, grant_name_confidence = grant_title, title_confidence
+
+        # If the award letter didn't yield a title (common for short contracts/letters),
+        # try the merged text which includes the proposal's program name fields.
+        if not grant_title:
+            if auth_fmt == "federal_noa":
+                grant_title, title_confidence = self._extract_grant_title_federal(lines)
+                grant_name, grant_name_confidence = self._extract_grant_name_federal(lines)
+            elif auth_fmt == "grant_agreement":
+                grant_title, title_confidence = self._extract_grant_title_grant_agreement(lines, text)
+                grant_name, grant_name_confidence = grant_title, title_confidence
+            elif auth_fmt == "contract":
+                grant_title, title_confidence = self._extract_grant_title_contract(lines)
+                grant_name, grant_name_confidence = grant_title, title_confidence
+            else:
+                grant_title, title_confidence = self._extract_grant_title_letter(lines, text)
+                grant_name, grant_name_confidence = grant_title, title_confidence
+
+        # Purpose and reporting: use merged text so the proposal's richer narrative
+        # fills in what a terse award letter leaves out.
+        if auth_fmt == "federal_noa":
+            purpose, purpose_confidence = self._extract_purpose_federal(lines, text)
+            reporting_requirements = self._extract_reporting_federal(lines)
+        elif auth_fmt == "grant_agreement":
+            purpose, purpose_confidence = self._extract_purpose_grant_agreement(lines, text)
+            reporting_requirements = self._extract_reporting_letter(lines)
+        elif auth_fmt == "contract":
+            purpose, purpose_confidence = self._extract_purpose_contract(lines, text)
+            reporting_requirements = []
+        else:
+            purpose, purpose_confidence = self._extract_purpose_letter(lines, text)
             reporting_requirements = self._extract_reporting_letter(lines)
 
         # Common extractors (work for all formats)
-        grant_amount = self._first_amount(amount_candidates)
-        grant_period = self._extract_grant_period(lines, date_candidates)
+        # Amount: smart phrase-search in award letter before falling back to first-found
+        grant_amount = self._extract_grant_amount(text, award_letter_text)
+        # Period: prefer award letter, fall back to merged text
+        grant_period = self._extract_grant_period(
+            auth_lines, self._unique(self.date_pattern.findall(auth_text))[:12]
+        )
+        if not grant_period:
+            grant_period = self._extract_grant_period(lines, date_candidates)
         timeline_items = self._extract_timeline(lines)
         submission_requirements = self._extract_submissions(lines)
         contacts = self._extract_contacts(lines, text)
@@ -154,9 +203,10 @@ class LocalExtractionService:
         if "NOTICE OF AWARD" in text_upper or "FEDERAL AWARD ID" in text_upper or "FAIN" in text_upper:
             return "federal_noa"
 
-        # Grant agreements: explicit GRANTEE/GRANTOR labels, or BETWEEN/AND structure
+        # Grant agreements: explicit GRANTEE/GRANTOR labels, or BETWEEN/AND structure.
+        # Use regex for the inline (Grantee) check to handle quoted form ("Grantee").
         if (("GRANTEE:" in text_upper and "GRANTOR:" in text_upper)
-                or "(GRANTEE)" in text_upper
+                or re.search(r'\(["“”]?GRANTEE["“”]?\)', text_upper)
                 or ("BETWEEN" in text_upper and "GRANTOR" in text_upper)):
             return "grant_agreement"
 
@@ -176,10 +226,17 @@ class LocalExtractionService:
         flat = re.sub(r"\n", " ", full_text)
 
         # 1. Address block: line before "Attn:" (most reliable)
+        _label_prefix_re = re.compile(
+            r"^(?:If\s+to|Attn|Attention|To:|From:|Re:|Subject:|Dear\b|\[)",
+            re.IGNORECASE,
+        )
         for i, line in enumerate(lines):
             if re.match(r"Attn[\s:.]", line, re.IGNORECASE) and i > 0:
                 candidate = lines[i - 1].strip()
-                if candidate and not re.search(r"\d{5}", candidate) and len(candidate) > 3:
+                if (candidate
+                        and not re.search(r"\d{5}", candidate)
+                        and len(candidate) > 3
+                        and not _label_prefix_re.match(candidate)):
                     return (candidate[:120], ExtractionConfidence.CONFIRMED)
 
         # 2. Address block without Attn: — line before a street/city line (typical letter layout:
@@ -224,11 +281,12 @@ class LocalExtractionService:
             if not self._GENERIC_WORDS.match(candidate) and len(candidate) > 4 and org_indicator_re.search(candidate):
                 return (candidate[:120], ExtractionConfidence.CONFIRMED)
 
-        # 5. Explicit label
+        # 5. Explicit label — must have colon immediately after keyword to avoid
+        #    matching mid-sentence occurrences like "providing Grantee with a grant"
         for line in lines[:20]:
-            if re.search(r"organization|grantee|recipient", line, re.IGNORECASE):
-                parts = re.split(r":|-", line, maxsplit=1)
-                if len(parts) > 1:
+            if re.search(r"(?:organization|grantee|recipient)\s*:", line, re.IGNORECASE):
+                parts = re.split(r":", line, maxsplit=1)
+                if len(parts) > 1 and parts[1].strip():
                     return (parts[1].strip()[:120], ExtractionConfidence.INFERRED)
 
         return (None, ExtractionConfidence.MISSING)
@@ -265,13 +323,26 @@ class LocalExtractionService:
             return (m.group(1).strip()[:120], ExtractionConfidence.CONFIRMED)
 
         # Letterhead: first 8 lines containing org-type word
+        # "Board" added so "Mental Health Board" matches; "Health" added for health orgs
         org_re = re.compile(
             r"\b(?:Foundation|Fund|Institute|Trust|Association|Corporation|Corp|Inc|LLC"
-            r"|Organization|Society|Council|Group|Agency|University|College|Services|Community)\b"
+            r"|Organization|Society|Council|Group|Agency|University|College|Services|Community"
+            r"|Board|Authority|Coalition|Network|Consortium|Health|Hospital|Clinic|Center)\b"
         )
-        for line in lines[:8]:
+        # Label-line filter: skip lines that are clearly field labels, not org names
+        _label_line_re = re.compile(
+            r"^(?:Name\s+of|If\s+to|Attn|Attention|To:|From:|Re:|Subject:|Dear\b)",
+            re.IGNORECASE,
+        )
+        for line in lines[:12]:
             if org_re.search(line) and 3 < len(line) < 120:
-                return (re.sub(r"\s{2,}", " ", line).strip(), ExtractionConfidence.INFERRED)
+                if _label_line_re.match(line):
+                    continue
+                # Strip trailing street address (e.g. "Org Name 123 Main St, City IL")
+                cleaned = re.sub(r"\s+\d+\s+[A-Z][A-Za-z].*$", "", line).strip()
+                cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+                if len(cleaned) > 3:
+                    return (cleaned, ExtractionConfidence.INFERRED)
 
         # Fallback: explicit label
         for line in lines[:25]:
@@ -343,6 +414,27 @@ class LocalExtractionService:
                 parts = re.split(r":|-", line, maxsplit=1)
                 if len(parts) > 1:
                     return (parts[1].strip()[:200], ExtractionConfidence.CONFIRMED)
+
+        # "This application requests funding to ensure…" — specific and reliable
+        m = re.search(
+            r"this\s+(?:application|request|grant)\s+(?:requests?|is)\s+funding\s+(?:to|for)\s+([^\.]{20,200})",
+            text, re.IGNORECASE,
+        )
+        if m:
+            return (m.group(1).strip()[:200], ExtractionConfidence.INFERRED)
+
+        # Proposal-style: "SPECIFIC PROGRAM FOR WHICH YOU ARE REQUESTING FUNDS" section
+        # → find the first substantive (non-instruction) paragraph after the header
+        _instruction_re = re.compile(
+            r"^(?:If\s+requesting|Please\s+indicate|Copy\s+and|Note:|Include\b)",
+            re.IGNORECASE,
+        )
+        for i, line in enumerate(lines):
+            if re.search(r"SPECIFIC PROGRAM FOR WHICH YOU ARE REQUESTING", line, re.IGNORECASE):
+                for j in range(i + 1, min(i + 10, len(lines))):
+                    candidate = lines[j].strip()
+                    if len(candidate) > 40 and not _instruction_re.match(candidate):
+                        return (candidate[:200], ExtractionConfidence.INFERRED)
 
         # Common phrases
         if "unrestricted general support" in text.lower():
@@ -656,11 +748,15 @@ class LocalExtractionService:
                 if val and len(val) > 3 and not re.match(r"^\d+$", val):
                     return (val[:120], ExtractionConfidence.CONFIRMED)
 
-        # 2. "(Grantee)" inline — the preceding text on the line is the org name
+        # 2. "(Grantee)" or '("Grantee")' inline — the preceding text is the org name
+        #    Handles both bare (Grantee) and quoted ("Grantee") forms
         for line in lines:
-            m = re.search(r"([A-Z][A-Za-z &,'.]+?)\s*\(Grantee\)", line)
+            m = re.search(
+                r'([A-Z][A-Za-z &,\'.]+?)\s*\(["\u201c\u201d]?Grantee["\u201c\u201d]?\)',
+                line,
+            )
             if m:
-                candidate = m.group(1).strip().rstrip(",")
+                candidate = m.group(1).strip().rstrip(",").strip()
                 if len(candidate) > 4:
                     return (candidate[:120], ExtractionConfidence.CONFIRMED)
 
@@ -692,11 +788,14 @@ class LocalExtractionService:
                 if val and len(val) > 3 and not re.match(r"^\d+$", val):
                     return (val[:120], ExtractionConfidence.CONFIRMED)
 
-        # 2. "(Grantor)" inline
+        # 2. "(Grantor)" or '("Grantor")' inline
         for line in lines:
-            m = re.search(r"([A-Z][A-Za-z &,'.]+?)\s*\(Grantor\)", line)
+            m = re.search(
+                r'([A-Z][A-Za-z &,\'.]+?)\s*\([""]?Grantor[""]?\)',
+                line,
+            )
             if m:
-                candidate = m.group(1).strip().rstrip(",")
+                candidate = m.group(1).strip().rstrip(",").strip()
                 if len(candidate) > 4:
                     return (candidate[:120], ExtractionConfidence.CONFIRMED)
 
@@ -720,6 +819,8 @@ class LocalExtractionService:
                 val = parts[1].strip() if len(parts) > 1 else ""
                 if not val and i + 1 < len(lines):
                     val = lines[i + 1].strip()
+                # Strip leading pipe/separator characters from table-extracted rows
+                val = re.sub(r"^\s*\|\s*", "", val).strip()
                 if val and len(val) > 3:
                     return (val[:160], ExtractionConfidence.CONFIRMED)
 
@@ -736,6 +837,56 @@ class LocalExtractionService:
         return self._extract_purpose_letter(lines, text)
 
     # ===== COMMON EXTRACTORS =====
+
+    def _extract_grant_amount(self, full_text: str, award_text: Optional[str]) -> Optional[float]:
+        """Extract the authoritative grant amount.
+
+        Search order:
+          1. Explicit award-amount phrases in the award letter ("grant in the amount of $X")
+          2. Explicit award-amount phrases anywhere in the merged text
+          3. First dollar amount in the award letter
+          4. First dollar amount in the merged text
+        This prevents a proposal's per-person subsidy or budget line item from
+        overriding the actual awarded total.
+        """
+        _award_phrases = [
+            # "a grant in the amount of $20,000"
+            r"grant\s+in\s+the\s+amount\s+of\s+(\$[\d,]+(?:\.\d{2})?)",
+            # "providing Grantee with a grant … $20,000"
+            r"providing\s+\w+\s+with\s+a\s+grant\s+(?:in\s+the\s+amount\s+of\s+)?(\$[\d,]+(?:\.\d{2})?)",
+            # "award(ed) in the amount of $X" / "award amount: $X"
+            r"award(?:ed)?\s+(?:in\s+the\s+amount\s+of|amount\s*[:\s]+)\s*(\$[\d,]+(?:\.\d{2})?)",
+            # "total award: $X"
+            r"total\s+award(?:\s+amount)?\s*[:\s]+(\$[\d,]+(?:\.\d{2})?)",
+            # "approved … for $X"
+            r"approved\s+(?:for|in\s+the\s+amount\s+of)\s+(\$[\d,]+(?:\.\d{2})?)",
+            # "grant of $X to [Org]"
+            r"grant\s+of\s+(\$[\d,]+(?:\.\d{2})?)",
+            # "amount of $X for the …" (common in short award letters)
+            r"amount\s+of\s+(\$[\d,]+(?:\.\d{2})?)",
+        ]
+
+        # Search targets in priority order: award letter first, then full merged text
+        search_targets = []
+        if award_text:
+            search_targets.append(award_text)
+        search_targets.append(full_text)
+
+        for target in search_targets:
+            for pattern in _award_phrases:
+                m = re.search(pattern, target, re.IGNORECASE)
+                if m:
+                    cleaned = re.sub(r"[^\d.]", "", m.group(1))
+                    if cleaned:
+                        return float(cleaned)
+
+        # Fallback: first dollar amount found in award letter, then merged text
+        for target in search_targets:
+            result = self._first_amount(self._unique(self.amount_pattern.findall(target)))
+            if result:
+                return result
+
+        return None
 
     def _extract_grant_period(self, lines: List[str], dates: List[str]) -> Optional[str]:
         """Extract the grant term / performance period."""

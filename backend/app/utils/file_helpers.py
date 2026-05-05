@@ -25,13 +25,31 @@ def extract_text_from_pdf(filepath: str) -> str:
 
 
 def extract_text_from_docx(filepath: str) -> str:
-    """Extract text from Word document"""
+    """Extract text from Word document, including table content."""
     try:
         doc = DocxDocument(filepath)
-        text = ""
+        parts: list[str] = []
+
+        # Paragraphs preserve reading order within the main body
         for paragraph in doc.paragraphs:
-            text += paragraph.text + "\n"
-        return text.strip()
+            if paragraph.text.strip():
+                parts.append(paragraph.text)
+
+        # Tables are not interleaved with paragraphs in python-docx's paragraph list,
+        # so we append them separately.  Each row becomes a pipe-separated line so
+        # budget rows like "Premium Assistance | $1,000,000" are extractable.
+        for table in doc.tables:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if cells:
+                    # Deduplicate merged cells (python-docx repeats merged cell text)
+                    deduped = [cells[0]]
+                    for c in cells[1:]:
+                        if c != deduped[-1]:
+                            deduped.append(c)
+                    parts.append("  |  ".join(deduped))
+
+        return "\n".join(parts).strip()
     except Exception as e:
         raise Exception(f"DOCX extraction failed: {str(e)}")
 
