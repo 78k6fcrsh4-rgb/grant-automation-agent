@@ -237,6 +237,10 @@ async def upload_grant_package(
     merged_text = "\n\n".join(merged_text_parts)
 
     redacted_text, redactions = privacy_service.redact_text(merged_text, privacy_settings)
+    # Also redact award letter in isolation so the LLM gets a clean authoritative section
+    redacted_award_text: Optional[str] = None
+    if award_text:
+        redacted_award_text, _ = privacy_service.redact_text(award_text, privacy_settings)
     grant_data = local_extraction_service.extract(
         merged_text,         # Always extract from raw text so redaction never hides amounts or names
         source_documents=source_documents,
@@ -271,6 +275,7 @@ async def upload_grant_package(
             grant_data,
             sanitized_text=redacted_text,
             source_documents=source_documents,
+            award_text=redacted_award_text,
         )
 
     grant_data_store[package_id] = grant_data

@@ -57,6 +57,7 @@ class LLMService:
         *,
         sanitized_text: str,
         source_documents: Optional[List[SourceDocument]] = None,
+        award_text: Optional[str] = None,
     ) -> GrantData:
         if DEMO_MODE:
             return self._demo_enrichment(base_data, sanitized_text, source_documents or [])
@@ -65,22 +66,32 @@ class LLMService:
 
         from langchain_core.prompts import ChatPromptTemplate
 
+        # Build award letter section for prompt (if available)
+        award_section = (
+            f"\nAward letter / grant agreement (AUTHORITATIVE — use this over the proposal for all fields):\n{award_text[:8000]}\n"
+            if award_text
+            else ""
+        )
+
         prompt = ChatPromptTemplate.from_template(
-            """
-You are reviewing grant materials that have already been locally parsed and redacted.
-Do not assume access to raw names, salaries, or contact details.
-Return valid JSON only.
+            """You are extracting structured grant management data from redacted grant documents.
+Return valid JSON only — no explanation, no markdown fences.
 
-Use the structured local extraction as your starting point and improve only what can be supported by the redacted text.
-Prefer explicit dates and requirements from the award letter if available.
-
-Redacted grant text:
+CRITICAL RULES:
+1. The award letter / grant agreement is the authoritative source. If proposal and award letter conflict, always use the award letter values.
+2. reporting_requirements: Extract ONLY explicit obligations — sentences where the grantee is required/obligated to submit, provide, or report something. Look for language like "required to submit", "shall submit", "agrees to provide", "must provide", "will provide". Do NOT include purpose descriptions, insurance clauses, or general boilerplate. Each item must describe what the grantee must actually do.
+3. budget: Extract ONLY what the award letter explicitly states about financial terms and disbursement (e.g. total amount, payment schedule, invoicing frequency). Do NOT infer budget line items from proposal categories. If the award letter has no line-item breakdown, return budget with total_grant_amount only and empty items array.
+4. grant_amount: The total dollar value awarded. Use only the award letter figure if available.
+5. grant_period: The performance period (e.g. "2025-2026", "July 1 2025 – June 30 2026"). Use award letter dates.
+6. Improve any field left as null/empty by local extraction where the redacted text provides clear evidence.
+{award_section}
+Full redacted grant text (supplementary context):
 {text}
 
-Local extraction snapshot:
+Local extraction snapshot (starting point — improve where you have clear evidence):
 {local_json}
 
-Return JSON with this shape:
+Return JSON:
 {{
   "organization_name": "",
   "grant_title": "",
@@ -90,13 +101,23 @@ Return JSON with this shape:
   "timeline": [],
   "budget": {{"total_grant_amount": 0, "items": []}},
   "workplan": {{"project_title": "", "grant_period": "", "tasks": []}},
-  "reporting_requirements": [],
+  "reporting_requirements": [
+    {{
+      "period": "quarterly or semi-annual or annual or as-requested or null",
+      "due_date": "YYYY-MM-DD or null",
+      "description": "Exact obligation: what the grantee must submit or provide",
+      "required_elements": []
+    }}
+  ],
   "submission_requirements": []
-}}
-"""
+}}"""
         )
         chain = prompt | self._llm
-        response = chain.invoke({"text": sanitized_text[:18000], "local_json": base_data.model_dump_json(indent=2)})
+        response = chain.invoke({
+            "text": sanitized_text[:12000],
+            "local_json": base_data.model_dump_json(indent=2),
+            "award_section": award_section,
+        })
         response_text = response.content.strip()
         if response_text.startswith("```json"):
             response_text = response_text[7:]

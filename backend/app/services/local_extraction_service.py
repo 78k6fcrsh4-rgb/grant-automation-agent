@@ -108,20 +108,23 @@ class LocalExtractionService:
                 grant_title, title_confidence = self._extract_grant_title_letter(lines, text)
                 grant_name, grant_name_confidence = grant_title, title_confidence
 
-        # Purpose and reporting: use merged text so the proposal's richer narrative
-        # fills in what a terse award letter leaves out.
+        # Purpose: use merged text so the proposal's richer narrative fills in what
+        # a terse award letter leaves out.
+        # Reporting: use award letter lines ONLY — those are the actual obligations;
+        # proposal text mentions reporting aspirationally and produces noise.
+        reporting_lines = _award_lines if _award_lines is not None else lines
         if auth_fmt == "federal_noa":
             purpose, purpose_confidence = self._extract_purpose_federal(lines, text)
-            reporting_requirements = self._extract_reporting_federal(lines)
+            reporting_requirements = self._extract_reporting_federal(reporting_lines)
         elif auth_fmt == "grant_agreement":
             purpose, purpose_confidence = self._extract_purpose_grant_agreement(lines, text)
-            reporting_requirements = self._extract_reporting_letter(lines)
+            reporting_requirements = self._extract_reporting_letter(reporting_lines)
         elif auth_fmt == "contract":
             purpose, purpose_confidence = self._extract_purpose_contract(lines, text)
-            reporting_requirements = []
+            reporting_requirements = self._extract_reporting_letter(reporting_lines)
         else:
             purpose, purpose_confidence = self._extract_purpose_letter(lines, text)
-            reporting_requirements = self._extract_reporting_letter(lines)
+            reporting_requirements = self._extract_reporting_letter(reporting_lines)
 
         # Common extractors (work for all formats)
         # Amount: smart phrase-search in award letter before falling back to first-found
@@ -138,7 +141,7 @@ class LocalExtractionService:
 
         # Build helper structures
         workplan = self._build_workplan(grant_title, grant_period, timeline_items)
-        budget = self._build_budget(grant_amount, amount_candidates, lines)
+        budget = self._build_budget(grant_amount, amount_candidates, lines, _award_lines)
 
         # Build extraction confidence tracking
         extraction_confidence = self._build_extraction_confidence(
@@ -455,33 +458,53 @@ class LocalExtractionService:
         return (None, ExtractionConfidence.MISSING)
 
     def _extract_reporting_letter(self, lines: List[str]) -> List[ReportingRequirement]:
-        """Extract reporting requirements from letter format."""
+        """Extract reporting requirements using obligation-language matching.
+
+        Only captures lines where the grantee is explicitly required/obligated to
+        submit, provide, or report — not lines that merely mention these words in
+        passing (e.g. purpose descriptions, insurance clauses, general boilerplate).
+        """
         requirements: List[ReportingRequirement] = []
 
+        # Obligation phrases that indicate an actual reporting requirement
+        obligation_re = re.compile(
+            r"(?:required to|shall submit|agrees?\s+to\s+(?:submit|provide|report)|"
+            r"must\s+(?:submit|provide|report)|will\s+submit|will\s+provide|"
+            r"covenant\s+to|agree\s+to\s+provide|obligated\s+to\s+(?:submit|provide|report))",
+            re.IGNORECASE,
+        )
+        # Skip lines that are clearly legal boilerplate unrelated to reporting
+        noise_re = re.compile(
+            r"insurance|indemnif|liabilit|attorney|counsel|jurisdiction|arbitration|"
+            r"governing\s+law|waiver|merger|assignment|successor|taxes|worker",
+            re.IGNORECASE,
+        )
+
         for line in lines:
-            if re.search(r"quarterly|semi-annual|annual|report", line, re.IGNORECASE):
-                due = self._first_date(line)
-                period = None
+            if not obligation_re.search(line):
+                continue
+            if noise_re.search(line):
+                continue
 
-                if re.search(r"quarterly", line, re.IGNORECASE):
-                    period = "quarterly"
-                elif re.search(r"semi-annual", line, re.IGNORECASE):
-                    period = "semi-annual"
-                elif re.search(r"annual", line, re.IGNORECASE):
-                    period = "annual"
+            due = self._first_date(line)
+            period = None
+            if re.search(r"quarterly", line, re.IGNORECASE):
+                period = "quarterly"
+            elif re.search(r"semi-annual", line, re.IGNORECASE):
+                period = "semi-annual"
+            elif re.search(r"annual", line, re.IGNORECASE):
+                period = "annual"
+            elif re.search(r"as.requested|upon\s+request", line, re.IGNORECASE):
+                period = "as-requested"
 
-                # Extract requirement name if present (e.g., "Mid-Year PPR", "Final Report")
-                name_match = re.search(r"([A-Za-z\s-]+(?:Report|PPR|Summary))", line, re.IGNORECASE)
-                description = name_match.group(1).strip() if name_match else line[:220]
-
-                requirements.append(
-                    ReportingRequirement(
-                        period=period,
-                        due_date=due,
-                        description=description,
-                        required_elements=self._infer_required_elements(line),
-                    )
+            requirements.append(
+                ReportingRequirement(
+                    period=period,
+                    due_date=due,
+                    description=line[:300],
+                    required_elements=self._infer_required_elements(line),
                 )
+            )
 
         return requirements[:6]
 
@@ -1086,9 +1109,25 @@ class LocalExtractionService:
             tasks=tasks,
         )
 
-    def _build_budget(self, grant_amount: Optional[float], amounts: List[str], lines: List[str]) -> Budget:
+    def _build_budget(
+        self,
+        grant_amount: Optional[float],
+        amounts: List[str],
+        lines: List[str],
+        award_lines: Optional[List[str]] = None,
+    ) -> Budget:
+        """Build budget structure.
+
+        Budget line items are only pulled from the award letter (award_lines) — not
+        the proposal — because the proposal contains requested spending categories
+        that may not reflect what was actually awarded.  If no explicit line items
+        appear in the award letter, the budget will contain only the total amount,
+        which is accurate and avoids fabricating line items from proposal text.
+        """
         items: List[BudgetItem] = []
-        for line in lines:
+        # Only scan award letter lines; fall back to full lines for single-file uploads
+        scan_lines = award_lines if award_lines is not None else lines
+        for line in scan_lines:
             if re.search(r"personnel|fringe|travel|supplies|consultant|equipment", line, re.IGNORECASE) and self.amount_pattern.search(line):
                 amount = self._first_amount([self.amount_pattern.search(line).group(0)]) or 0.0
                 category = re.split(r":|-", line, maxsplit=1)[0][:80]

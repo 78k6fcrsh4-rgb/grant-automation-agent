@@ -15,21 +15,39 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from icalendar import Calendar, Event, Alarm
 from datetime import datetime, timedelta
 from app.models.schemas import GrantData
-from typing import Dict, List
+from typing import Dict, List, Optional
 import os
 import re
 
 
 class DocumentService:
     """Universal document generation service that adapts to any grant format"""
-    
+
     def __init__(self, temp_dir: str = "temp_files"):
         self.temp_dir = temp_dir
         os.makedirs(temp_dir, exist_ok=True)
-    
+
+    def _make_file_slug(self, grant_data: GrantData) -> str:
+        """Build a human-readable filename prefix from org and funder names.
+
+        Format: <OrgName>_<FunderName> (up to ~80 chars, filesystem-safe).
+        Falls back to 'grant' if both names are missing.
+        """
+        parts: List[str] = []
+        if grant_data.organization_name:
+            parts.append(grant_data.organization_name[:50])
+        if grant_data.funder_name:
+            funder = re.sub(r"^The\s+", "", grant_data.funder_name, flags=re.IGNORECASE)
+            funder_words = funder.split()[:4]
+            parts.append(" ".join(funder_words)[:40])
+        slug = "_".join(parts) if parts else "grant"
+        slug = re.sub(r"[^A-Za-z0-9_]", "_", slug)
+        slug = re.sub(r"_+", "_", slug).strip("_")
+        return slug[:80] or "grant"
+
     def generate_workplan_pdf(self, grant_data: GrantData, file_id: str) -> str:
         """Generate comprehensive work plan PDF adapted to grant structure"""
-        filename = f"{file_id}_workplan.pdf"
+        filename = f"{self._make_file_slug(grant_data)}_workplan.pdf"
         filepath = os.path.join(self.temp_dir, filename)
         
         doc = SimpleDocTemplate(
@@ -223,7 +241,7 @@ class DocumentService:
         Generate comprehensive budget Excel matching government grant format
         Creates: 1) Budget Summary 2) Reimbursement Tracker 3) Disbursement Schedule
         """
-        filename = f"{file_id}_budget.xlsx"
+        filename = f"{self._make_file_slug(grant_data)}_budget.xlsx"
         filepath = os.path.join(self.temp_dir, filename)
         
         wb = Workbook()
@@ -547,7 +565,7 @@ class DocumentService:
     
     def generate_report_template_docx(self, grant_data: GrantData, file_id: str) -> str:
         """Generate progress report template matching grant requirements"""
-        filename = f"{file_id}_report_template.docx"
+        filename = f"{self._make_file_slug(grant_data)}_report_template.docx"
         filepath = os.path.join(self.temp_dir, filename)
         
         doc = Document()
@@ -718,7 +736,7 @@ class DocumentService:
     
     def generate_agenda_template_docx(self, grant_data: GrantData, file_id: str) -> str:
         """Generate a status meeting agenda template."""
-        filename = f"{file_id}_agenda.docx"
+        filename = f"{self._make_file_slug(grant_data)}_agenda.docx"
         filepath = os.path.join(self.temp_dir, filename)
 
         doc = Document()
@@ -843,7 +861,7 @@ class DocumentService:
         Each event includes a standard agenda template in the DESCRIPTION.
         Uses RRULE for clean recurrence rather than individual events.
         """
-        filename = f"{file_id}_meeting_calendar.ics"
+        filename = f"{self._make_file_slug(grant_data)}_meeting_calendar.ics"
         filepath = os.path.join(self.temp_dir, filename)
         cal = Calendar()
         cal.add('prodid', '-//Grant Status Meetings//EN//')
@@ -905,7 +923,7 @@ class DocumentService:
         payment categories.  Each event DESCRIPTION includes a checklist of
         items to complete before submitting the disbursement request.
         """
-        filename = f"{file_id}_disbursement_calendar.ics"
+        filename = f"{self._make_file_slug(grant_data)}_disbursement_calendar.ics"
         filepath = os.path.join(self.temp_dir, filename)
         cal = Calendar()
         cal.add('prodid', '-//Grant Disbursements//EN//')
@@ -977,7 +995,7 @@ class DocumentService:
         Draws from both extracted reporting_requirements and timeline items in the
         'report' category.  Each event DESCRIPTION lists the required report elements.
         """
-        filename = f"{file_id}_reporting_calendar.ics"
+        filename = f"{self._make_file_slug(grant_data)}_reporting_calendar.ics"
         filepath = os.path.join(self.temp_dir, filename)
         cal = Calendar()
         cal.add('prodid', '-//Grant Reporting Deadlines//EN//')
@@ -1071,7 +1089,7 @@ class DocumentService:
         5. Reporting Obligations
         6. Data Gaps & Notes
         """
-        filename = f"{file_id}_grant_summary.docx"
+        filename = f"{self._make_file_slug(grant_data)}_grant_summary.docx"
         filepath = os.path.join(self.temp_dir, filename)
         doc = Document()
 
