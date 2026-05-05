@@ -99,3 +99,20 @@ jobs:
           containerAppName: ${{ env.BACKEND_APP }}
           resourceGroup: ${{ env.RESOURCE_GROUP }}
           imageToDeploy: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
+
+      - name: Inject OpenAI key from Key Vault into backend Container App
+        run: |
+          OPENAI_KEY=$(az keyvault secret show \
+            --vault-name KVgrantsagent \
+            --name OPENAI-API-KEY \
+            --query value -o tsv)
+
+          az containerapp secret set \
+            --name ${{ env.BACKEND_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --secrets openai-key="$OPENAI_KEY"
+
+          az containerapp update \
+            --name ${{ env.BACKEND_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --set-env-vars OPENAI_API_KEY=secretref:openai-key
