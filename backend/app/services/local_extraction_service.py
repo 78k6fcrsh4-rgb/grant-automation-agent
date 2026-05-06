@@ -110,7 +110,7 @@ class LocalExtractionService:
 
         # Purpose: use merged text so the proposal's richer narrative fills in what
         # a terse award letter leaves out.
-        # Reporting: use award letter lines ONLY — those are the actual obligations;
+        # Reporting: use award letter lines ONLY -- those are the actual obligations;
         # proposal text mentions reporting aspirationally and produces noise.
         reporting_lines = _award_lines if _award_lines is not None else lines
         if auth_fmt == "federal_noa":
@@ -200,18 +200,28 @@ class LocalExtractionService:
         )
 
     def _detect_document_format(self, text: str) -> str:
-        """Detect document format: federal_noa, grant_agreement, contract, or letter."""
+        """Detect document format: federal_noa, grant_agreement, contract, or letter.
+
+        grant_agreement is checked BEFORE federal_noa because long grant agreement
+        documents (e.g. Illinois DHS agreements) reference federal award terminology
+        (FAIN, 2 CFR 200, etc.) in their compliance boilerplate, which would
+        otherwise cause a false federal_noa match.  Explicit party-labeling signals
+        like '(Grantee)' and 'GRANT AGREEMENT\\nBETWEEN' are stronger than FAIN.
+        """
         text_upper = text.upper()
 
+        # Grant agreements: check FIRST -- explicit party labels are the strongest signal.
+        if (
+            ("GRANTEE:" in text_upper and "GRANTOR:" in text_upper)
+            or re.search(r'\(["""]?GRANTEE["""]?\)', text_upper)
+            or ("BETWEEN" in text_upper and "GRANTOR" in text_upper)
+            or re.search(r'GRANT AGREEMENT\s*\n\s*BETWEEN', text_upper)
+        ):
+            return "grant_agreement"
+
+        # Federal NOA: checked after ruling out explicit grant agreement structure.
         if "NOTICE OF AWARD" in text_upper or "FEDERAL AWARD ID" in text_upper or "FAIN" in text_upper:
             return "federal_noa"
-
-        # Grant agreements: explicit GRANTEE/GRANTOR labels, or BETWEEN/AND structure.
-        # Use regex for the inline (Grantee) check to handle quoted form ("Grantee").
-        if (("GRANTEE:" in text_upper and "GRANTOR:" in text_upper)
-                or re.search(r'\(["“”]?GRANTEE["“”]?\)', text_upper)
-                or ("BETWEEN" in text_upper and "GRANTOR" in text_upper)):
-            return "grant_agreement"
 
         if "DELEGATE AGENCY:" in text_upper or "RELEASE PACKAGE" in text_upper or "PURCHASE ORDER NUMBER:" in text_upper:
             return "contract"
@@ -242,7 +252,7 @@ class LocalExtractionService:
                         and not _label_prefix_re.match(candidate)):
                     return (candidate[:120], ExtractionConfidence.CONFIRMED)
 
-        # 2. Address block without Attn: — line before a street/city line (typical letter layout:
+        # 2. Address block without Attn: -- line before a street/city line (typical letter layout:
         #    Org name, [contact name,] [title,] street, city state zip, Dear X)
         for i, line in enumerate(lines):
             if re.match(r"Dear\b", line, re.IGNORECASE) and i >= 2:
@@ -272,7 +282,7 @@ class LocalExtractionService:
             if not self._GENERIC_WORDS.match(candidate) and len(candidate) > 4:
                 return (candidate[:120], ExtractionConfidence.CONFIRMED)
 
-        # 4. "[Org] has been awarded/approved" — less precise, used as fallback
+        # 4. "[Org] has been awarded/approved" -- less precise, used as fallback
         #    Require org-indicator word so we don't pick up grant title phrases.
         org_indicator_re = re.compile(
             r"\b(?:Inc|LLC|Foundation|Services|Center|Institute|Council|Association|Organization|Corp|Trust)\b",
@@ -284,7 +294,7 @@ class LocalExtractionService:
             if not self._GENERIC_WORDS.match(candidate) and len(candidate) > 4 and org_indicator_re.search(candidate):
                 return (candidate[:120], ExtractionConfidence.CONFIRMED)
 
-        # 5. Explicit label — must have colon immediately after keyword to avoid
+        # 5. Explicit label -- must have colon immediately after keyword to avoid
         #    matching mid-sentence occurrences like "providing Grantee with a grant"
         for line in lines[:20]:
             if re.search(r"(?:organization|grantee|recipient)\s*:", line, re.IGNORECASE):
@@ -317,7 +327,7 @@ class LocalExtractionService:
                             return (m.group(1).strip(), ExtractionConfidence.CONFIRMED)
                     return (candidate, ExtractionConfidence.CONFIRMED)
 
-        # "On behalf of [The] Funder Name," — check before letterhead (more precise)
+        # "On behalf of [The] Funder Name," -- check before letterhead (more precise)
         m = re.search(
             r"[Oo]n behalf of\s+(?:[Tt]he\s+)?([A-Z][A-Za-z &,'./-]+?)(?:,|\.\s|\s+[Ii]\s|\s+[Ww]e\s|$)",
             text,
@@ -418,7 +428,7 @@ class LocalExtractionService:
                 if len(parts) > 1:
                     return (parts[1].strip()[:200], ExtractionConfidence.CONFIRMED)
 
-        # "This application requests funding to ensure…" — specific and reliable
+        # "This application requests funding to ensure…" -- specific and reliable
         m = re.search(
             r"this\s+(?:application|request|grant)\s+(?:requests?|is)\s+funding\s+(?:to|for)\s+([^\.]{20,200})",
             text, re.IGNORECASE,
@@ -461,7 +471,7 @@ class LocalExtractionService:
         """Extract reporting requirements using obligation-language matching.
 
         Only captures lines where the grantee is explicitly required/obligated to
-        submit, provide, or report — not lines that merely mention these words in
+        submit, provide, or report -- not lines that merely mention these words in
         passing (e.g. purpose descriptions, insurance clauses, general boilerplate).
         """
         requirements: List[ReportingRequirement] = []
@@ -532,7 +542,7 @@ class LocalExtractionService:
                 if val and len(val) > 3:
                     return (val[:120], ExtractionConfidence.CONFIRMED)
 
-        # 3. Address block before "Dear" — pattern: Name+Title, ORG NAME, Street, City/State
+        # 3. Address block before "Dear" -- pattern: Name+Title, ORG NAME, Street, City/State
         #    Walk backwards from "Dear" skipping address lines to find the org name
         _org_words_re = re.compile(
             r"\b(?:Inc|LLC|Foundation|Services|Center|Institute|Council|Association"
@@ -564,8 +574,8 @@ class LocalExtractionService:
         return self._extract_grantee_letter(lines)
 
     def _extract_funder_federal(self, lines: List[str], text: str) -> Tuple[Optional[str], ExtractionConfidence]:
-        """Extract funder from federal NOA format — signature block org is most precise."""
-        # 1. Signature block — keyword must START the line (re.match) to avoid mid-doc false matches
+        """Extract funder from federal NOA format -- signature block org is most precise."""
+        # 1. Signature block -- keyword must START the line (re.match) to avoid mid-doc false matches
         sig_re = re.compile(r"^\s*(?:Respectfully|Sincerely|Regards)\b", re.IGNORECASE)
         dept_re = re.compile(r"\b(?:Department|Administration|Agency|Office|Services|Bureau|Commission)\b", re.IGNORECASE)
         for i, line in enumerate(lines):
@@ -575,7 +585,7 @@ class LocalExtractionService:
                     if dept_re.search(candidate) and 5 < len(candidate) < 120:
                         return (candidate, ExtractionConfidence.CONFIRMED)
 
-        # 2. Specific known federal agencies — search HEADER area only (first 40 lines)
+        # 2. Specific known federal agencies -- search HEADER area only (first 40 lines)
         #    to avoid matching boilerplate references mid-document
         specific_agencies = [
             "Administration for Community Living",
@@ -613,7 +623,7 @@ class LocalExtractionService:
                 if not value and i + 1 < len(lines):
                     value = lines[i + 1].strip()
                     next_line_used = True
-                # Check continuation — start from i+1 if value was inline, i+2 if from next line
+                # Check continuation -- start from i+1 if value was inline, i+2 if from next line
                 start = (i + 2) if next_line_used else (i + 1)
                 for cont_idx in range(start, min(start + 2, len(lines))):
                     nxt = lines[cont_idx].strip()
@@ -761,17 +771,25 @@ class LocalExtractionService:
           - "(Grantee)" inline marker (IYIP-style state agreements)
           - BETWEEN … AND … structure (state contracts)
         """
-        # 1. GRANTEE: label — value inline or on next line
+        # Structural tokens that can appear as the "next line" after a label in
+        # form-layout PDFs but are not org names (e.g. "ARTICLE XXIII" as a
+        # cross-reference to the grantee obligations article).
+        _structural_re = re.compile(
+            r"^(?:ARTICLE|SECTION|EXHIBIT|PART|SCHEDULE|APPENDIX)\s+[IVXLC\d]",
+            re.IGNORECASE,
+        )
+
+        # 1. GRANTEE: label -- value inline or on next line
         for i, line in enumerate(lines):
             if re.match(r"^\s*GRANTEE\s*:", line, re.IGNORECASE):
                 parts = line.split(":", 1)
                 val = parts[1].strip() if len(parts) > 1 else ""
                 if not val and i + 1 < len(lines):
                     val = lines[i + 1].strip()
-                if val and len(val) > 3 and not re.match(r"^\d+$", val):
+                if val and len(val) > 3 and not re.match(r"^\d+$", val) and not _structural_re.match(val):
                     return (val[:120], ExtractionConfidence.CONFIRMED)
 
-        # 2. "(Grantee)" or '("Grantee")' inline — the preceding text is the org name
+        # 2. "(Grantee)" or '("Grantee")' inline -- the preceding text is the org name
         #    Handles both bare (Grantee) and quoted ("Grantee") forms
         for line in lines:
             m = re.search(
@@ -783,7 +801,7 @@ class LocalExtractionService:
                 if len(candidate) > 4:
                     return (candidate[:120], ExtractionConfidence.CONFIRMED)
 
-        # 3. BETWEEN … AND … structure — grantee follows the "AND" separator
+        # 3. BETWEEN … AND … structure -- grantee follows the "AND" separator
         for i, line in enumerate(lines):
             if re.match(r"^\s*BETWEEN\s*$", line.strip(), re.IGNORECASE):
                 for j in range(i + 1, min(i + 25, len(lines))):
@@ -801,7 +819,7 @@ class LocalExtractionService:
 
     def _extract_funder_grant_agreement(self, lines: List[str]) -> Tuple[Optional[str], ExtractionConfidence]:
         """Extract funder/grantor from grant agreement format."""
-        # 1. GRANTOR: label — value inline or on next line
+        # 1. GRANTOR: label -- value inline or on next line
         for i, line in enumerate(lines):
             if re.match(r"^\s*GRANTOR\s*:", line, re.IGNORECASE):
                 parts = line.split(":", 1)
@@ -822,7 +840,7 @@ class LocalExtractionService:
                 if len(candidate) > 4:
                     return (candidate[:120], ExtractionConfidence.CONFIRMED)
 
-        # 3. BETWEEN … AND … structure — grantor is the party named AFTER "BETWEEN"
+        # 3. BETWEEN … AND … structure -- grantor is the party named AFTER "BETWEEN"
         for i, line in enumerate(lines):
             if re.match(r"^\s*BETWEEN\s*$", line.strip(), re.IGNORECASE):
                 for j in range(i + 1, min(i + 5, len(lines))):
@@ -836,12 +854,21 @@ class LocalExtractionService:
 
     def _extract_grant_title_grant_agreement(self, lines: List[str], text: str) -> Tuple[Optional[str], ExtractionConfidence]:
         """Extract grant/program title from grant agreement format."""
+        # Label prefix pattern to strip from values like
+        # "FEDERAL PROGRAM NAME: STATE PROGRAM NAME: ILLINOIS YOUTH INVESTMENT PROGRAM"
+        # where splitting on the first ":" leaves "STATE PROGRAM NAME: ..." in the value.
+        _label_prefix_re = re.compile(
+            r"^(?:(?:FEDERAL|STATE|LOCAL)\s+)?(?:PROGRAM|PROJECT|GRANT)\s+NAME\s*:\s*",
+            re.IGNORECASE,
+        )
         for i, line in enumerate(lines):
-            if re.search(r"grant name:|program name:|project name:|grant title:", line, re.IGNORECASE):
+            if re.search(r"grant name:|program name:|project name:|grant title:|state program name:", line, re.IGNORECASE):
                 parts = re.split(r":", line, maxsplit=1)
                 val = parts[1].strip() if len(parts) > 1 else ""
                 if not val and i + 1 < len(lines):
                     val = lines[i + 1].strip()
+                # Strip residual label prefixes (e.g. "STATE PROGRAM NAME: ...")
+                val = _label_prefix_re.sub("", val).strip()
                 # Strip leading pipe/separator characters from table-extracted rows
                 val = re.sub(r"^\s*\|\s*", "", val).strip()
                 if val and len(val) > 3:
@@ -881,6 +908,11 @@ class LocalExtractionService:
             r"award(?:ed)?\s+(?:in\s+the\s+amount\s+of|amount\s*[:\s]+)\s*(\$[\d,]+(?:\.\d{2})?)",
             # "total award: $X"
             r"total\s+award(?:\s+amount)?\s*[:\s]+(\$[\d,]+(?:\.\d{2})?)",
+            # "Appropriation Amount: $X" (Illinois DHS / state agency style)
+            r"appropriation\s+amount\s*[:\s]+(\$[\d,]+(?:\.\d{2})?)",
+            # "Total Project Costs $X" / "State Request $X"
+            r"total\s+project\s+costs?\s+(\$[\d,]+(?:\.\d{2})?)",
+            r"state\s+request\s+(\$[\d,]+(?:\.\d{2})?)",
             # "approved … for $X"
             r"approved\s+(?:for|in\s+the\s+amount\s+of)\s+(\$[\d,]+(?:\.\d{2})?)",
             # "grant of $X to [Org]"
@@ -954,10 +986,20 @@ class LocalExtractionService:
         if m:
             return f"{m.group(1)} \u2013 {m.group(2)}"
 
+        # "Fiscal Year XXXX" (state agency style)
+        m = re.search(r"fiscal\s+year\s+(20\d{2})", full_text, re.IGNORECASE)
+        if m:
+            return f"Fiscal Year {m.group(1)}"
+
         # "expended by DATE" / "no later than DATE"
+        # Require a 4-digit year so "no later than 60 calendar days" is not matched.
+        _month_names = (
+            r"(?:January|February|March|April|May|June|"
+            r"July|August|September|October|November|December)"
+        )
         m = re.search(
-            r"(?:expended\s+by|no\s+later\s+than)\s+"
-            r"(\d{1,2}\s+[A-Za-z]+(?:\s+\d{4})?|[A-Za-z]+\s+\d{1,2},?\s+\d{4})",
+            rf"(?:expended\s+by|no\s+later\s+than)\s+"
+            rf"(\d{{1,2}}\s+{_month_names}\s+\d{{4}}|{_month_names}\s+\d{{1,2}},?\s+\d{{4}})",
             full_text, re.IGNORECASE,
         )
         if m:
@@ -1118,8 +1160,8 @@ class LocalExtractionService:
     ) -> Budget:
         """Build budget structure.
 
-        Budget line items are only pulled from the award letter (award_lines) — not
-        the proposal — because the proposal contains requested spending categories
+        Budget line items are only pulled from the award letter (award_lines) -- not
+        the proposal -- because the proposal contains requested spending categories
         that may not reflect what was actually awarded.  If no explicit line items
         appear in the award letter, the budget will contain only the total amount,
         which is accurate and avoids fabricating line items from proposal text.
@@ -1168,25 +1210,25 @@ class LocalExtractionService:
         gaps = []
 
         if not org_name:
-            gaps.append("Organization name not found — no address block or 'Attn:' pattern detected")
+            gaps.append("Organization name not found -- no address block or 'Attn:' pattern detected")
 
         if not funder_name:
             if document_format == "letter":
-                gaps.append("Funder not found — no signature block with org indicator detected")
+                gaps.append("Funder not found -- no signature block with org indicator detected")
             else:
-                gaps.append("Funder not found — no labeled program title or department field")
+                gaps.append("Funder not found -- no labeled program title or department field")
 
         if not grant_amount:
-            gaps.append("Grant amount not found — no dollar amount pattern detected")
+            gaps.append("Grant amount not found -- no dollar amount pattern detected")
 
         if not grant_period:
-            gaps.append("Grant period not found — no explicit dates or duration mentioned")
+            gaps.append("Grant period not found -- no explicit dates or duration mentioned")
 
         if not reporting_requirements:
             if document_format in ("letter", "grant_agreement", None):
-                gaps.append("Reporting requirements not found — letter does not mention reporting obligations")
+                gaps.append("Reporting requirements not found -- letter does not mention reporting obligations")
             elif document_format == "federal_noa":
-                gaps.append("Reporting requirements not found — no REPORTING REQUIREMENTS section detected")
+                gaps.append("Reporting requirements not found -- no REPORTING REQUIREMENTS section detected")
 
         return gaps
 

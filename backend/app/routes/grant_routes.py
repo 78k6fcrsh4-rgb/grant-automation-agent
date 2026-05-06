@@ -28,12 +28,16 @@ privacy_service = PrivacyService()
 local_extraction_service = LocalExtractionService()
 
 
-def _ocr_pdf_text(filepath: str) -> str:
+def _ocr_pdf_text(filepath: str, max_pages: int = 5) -> str:
     """OCR a scanned PDF using PyMuPDF (page rendering) + pytesseract.
 
     Renders each page at 2x scale (~144 DPI) and passes the result to
     Tesseract. This handles both embedded-image PDFs and fully rasterised
     scans. Returns an empty string if OCR fails for any reason.
+
+    max_pages caps processing to avoid hanging on large scanned documents
+    (e.g. 30+ page contracts where only the first few pages contain the
+    key grant header information needed for extraction).
     """
     try:
         import fitz  # PyMuPDF
@@ -43,7 +47,7 @@ def _ocr_pdf_text(filepath: str) -> str:
         doc = fitz.open(filepath)
         text_parts: list[str] = []
         mat = fitz.Matrix(2, 2)  # 2× scale ≈ 144 DPI — reliable for Tesseract
-        for page in doc:
+        for page in doc.pages(0, min(max_pages, len(doc))):
             pix = page.get_pixmap(matrix=mat)
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             text_parts.append(pytesseract.image_to_string(img))
