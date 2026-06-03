@@ -121,6 +121,14 @@ class SubmissionRequirement(BaseModel):
     instructions: Optional[str] = None
 
 
+class FieldProvenance(BaseModel):
+    """Where an extracted scalar value came from, and how trustworthy it is."""
+    value: Optional[str] = None
+    confidence: ExtractionConfidence = ExtractionConfidence.MISSING
+    source_document: Optional[DocumentKind] = None
+    quote: Optional[str] = None  # verbatim snippet the value was drawn from
+
+
 class GrantData(BaseModel):
     organization_name: Optional[str] = None
     grant_title: Optional[str] = None
@@ -149,6 +157,9 @@ class GrantData(BaseModel):
     extraction_confidence: Dict[str, str] = Field(default_factory=dict)
     data_gaps: List[str] = Field(default_factory=list)
     document_format: Optional[str] = None
+    field_provenance: Dict[str, FieldProvenance] = Field(default_factory=dict)
+    validation_flags: List[str] = Field(default_factory=list)
+    extraction_method: Optional[str] = None  # "llm", "regex", or "llm+regex"
 
 
 class UploadResponse(BaseModel):

@@ -1,0 +1,18 @@
+{
+  "_note": "Hand-verified expected values for the Milton/DuPage FY2026 award. Used by the golden-set regression test.",
+  "grant_amount": 33600.0,
+  "wrong_threshold_amount": 20000.0,
+  "organization_name_contains": "DuPage Health Coalition",
+  "funder_name_contains": "Milton Township Community Mental Health Board",
+  "grant_title_contains": "Silver Access",
+  "grant_period_contains_any": [
+    "2026",
+    "Fiscal Year 2026",
+    "FY2026"
+  ],
+  "min_reporting_requirements": 2,
+  "classification": {
+    "proposal": "proposal",
+    "moa": "award_letter"
+  }
+}

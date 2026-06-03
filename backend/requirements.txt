@@ -33,3 +33,6 @@ pydantic-settings==2.6.0
 
 # CORS
 fastapi-cors==0.0.6
+
+# Testing
+pytest==8.3.3
