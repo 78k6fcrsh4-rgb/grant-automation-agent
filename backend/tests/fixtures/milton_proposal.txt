@@ -1,0 +1,223 @@
+missMilton Township 708 Board Funding Application - FY2026
+Milton Township
+Basic Information	
+Verification of Funding Guidelines*
+Please read and download a copy of the 2026 Milton Township CMHB Funding Guidelines. Initial that these guidelines have been read.
+Character Limit: 3
+Project Name*
+Provide a brief name for your project.
+Character Limit: 100
+Silver Access: Support mental health, medication, and related care with quality subsidized insurance
+Purpose*
+Briefly describe the purpose of your request.
+Example: To support (name or type of program) that will (what the project will ultimately do).
+Character Limit: 250
+To expand access to essential behavioral health care, including counseling, medication, substance use recovery, and related medical services, for low-income Milton Township residents through ACA premium subsidies, reducing financial barriers to care.
+Program Area*
+Which program area best describes your request? May select multiple options (per 405 ILCS 20 statute definition).
+(Selection should be based on the program/project content, not necessarily the type of organization.)
+Choices
+Mental Health
+Services for Individuals with Developmental Disabilities Substance Abuse Prevention, Treatment or Recovery
+Type of Funding*
+Specify the type of funding you are requesting:
+Choices
+General Operating Program Support Salary Support Special Project
+Population Served*
+Which population best describes those who will be served by this program/project? May select multiple options.
+(Must be Milton Township residents only)
+Choices Adults Children/Youth
+Disabled-Developmental Disabled-Physical Families
+General Public Homeless Immigrants Incarcerated Adults
+Incarcerated Juveniles Infants/Toddlers LGBTQ
+Low-Income People of Color Seniors Veterans Women
+Project Type*
+Please indicate if your project is new, continuing or one-time program/project?
+Choices
+New Program / Project Continuing Program / Project One-Time Program / Project
+Program / Project Cost*
+What is the total cost of your program/project?
+Character Limit: 20
+$1,104,807
+Funding Amount Requested*
+What amount is requested?
+Character Limit: 20
+$33,600
+Eligibility*
+Recipients of the Milton County 708 Board funding must ensure that individuals who receive services from this funding award are Milton Township Residents. What method will your organization use to track recipient residency?
+Choices
+ArcGIS or other method of geocoding Manual Tracking
+Other
+Eligibility - follow up*
+Please describe your detailed method for tracking Milton Township residents of your proposed program.
+Funds received can only be used to serve Milton Township residents, therefore a participant tracking plan must be presented in order to be considered for funding.
+Character Limit: 1000
+All program participants must be permanent DuPage County residents for at least 30 days and intend to live in DuPage County year-round. Proof of residency is required. The city/town where they live is part of the application process, and DHC can use it (in part) to determine Township residency. Recognizing the imperfect nature of that approach, several years ago, we asked our partners at DuPage County for assistance. In July 2025, DuPage County Community Services used ARCGIS to geocode all current Silver Access members to provide us with precise data about the percentage of our membership living within Milton Township. We repeat this process at a regular cadence as a proxy measure to affirm township residency.
+Application Narrative	
+Organization Description*
+What is the overall purpose or mission of your organization? Include a brief history, the date established, and the date 501(c)(3) was granted.
+Character Limit: 2500/2414
+The DuPage Health Coalition (DHC) is committed to its mission to build equitable access to essential and preventive health services, pioneering innovative programs and partnerships, tailoring our services to support our resource-limited DuPage neighbors. Dedicated to cultivating a thriving community where ALL residents are healthy enough to work and care for their families, DHC was established in 2001 when 14 health and human service partners joined forces to ensure comprehensive, high-quality healthcare was available for uninsured DuPage County residents. Our 501 (c)(3) status was granted in March 2001. 
+Access DuPage, our founding program, remains central to our efforts 24 years and 81,000 patients later, providing low-cost comprehensive health care for insurance-ineligible individuals. Our services have grown significantly throughout the years. Cognizant that the Affordable Care Act (ACA) expanded pathways to healthcare but still left some struggling to pay, DHC launched Silver Access ACA premium assistance in 2015, increasing insurance affordability for local families. Two years later, we launched DuPage Dispensary of Hope, a free pharmacy for the uninsured. DHC has been a leader in expanding mental health access, improving resources for substance use recovery, and growing avenues to community vaccinations. Our programming has taken an increasingly strategic approach to looking at the upstream building blocks of health. Our educational workshops illustrate this. Long providing bilingual health education, offerings have grown to include health literacy, health insurance education, chronic disease management, financial fitness, and youth and adult mental health first aid. 
+In 2022, DHC introduced two medical debt programs. 1) Medical Debt Care DuPage helps navigate financial assistance to achieve debt relief. 2) A partnership with Undue Medical Debt seeks debt abolishment by engaging local health providers. In 2023, DHC introduced Everyday Hero, a CPR/Narcan/AED Initiative. In FY 2025, we launched a dental care coordination program and breast health navigation.
+With almost 93% of revenue directed toward patient care, we are careful stewards of our resources. Partnerships enable our neighbors to receive coordinated services commonly inaccessible in other communities. Our diligent efforts ensure that measurable health improvement is the consequence of all our collaborations.
+Accreditation*
+Is your agency accredited? If yes, by which accrediting body(ies)?
+Character Limit: 500
+The DuPage Health Coalition is not an accredited agency. It is notable, however, that we recently completed a State of Illinois Fiscal Administrative Review, a rigorous process that affirms the soundness of our policies and fiscal stewardship.
+Program/Project Description*
+Describe the program/project to be funded.
+Character Limit: 2500/2379
+This request supports Silver Access (SA) in providing low-income Milton Township residents with affordable, high-quality ACA health insurance, ensuring low out-of-pocket costs for comprehensive behavioral health. 73.7% of uninsured adults cite insurance affordability as their reason for being uninsured (CDC). Despite an overall insured rate of 94.1%, almost 56,000 DuPage residents are uninsured. Silver Access responds to an emerging challenge: high-quality health insurance is unaffordable for many people. DHC too often encountered insurance eligible families forgoing insurance due to cost. Equally troubling, an additional segment of families selected the lowest cost plans, resulting in restricted coverage and exorbitant out-of-pocket costs. SA helps vulnerable DuPage County residents select high-quality ACA health insurance plans with affordable copays. To do this, SA pays up to $1,800 annually per individual toward their premiums, increasing their healthcare access. SA is the first program of its kind in Illinois, and one of only a few programs nationally. The significant growth of SA, evidenced by a near-doubling of enrollment in the last three years and the growing number of individuals currently placed on our waiting list, mirrors a broader national trend reported by Kaiser Family Foundation; the number of ACA Marketplace enrollees receiving premium tax credits has nearly doubled since 2020. SA makes primary care, counseling, psychiatric care, substance use treatment, and behavioral health medications affordable. Notably, many Silver ACA plans make primary care and generic medications available at no cost, or for a very small copayment. Primary care physicians have the training and expertise required to treat mental illness and are the most common prescribers of behavioral health medications. Early intervention can prevent mental health conditions from escalating and can lead to better treatment of co-occurring chronic health conditions like diabetes.  
+By offering comprehensive behavioral health treatment through affordable insurance, the Milton Township Mental Health Board will reduce reliance on costly emergency interventions, improve the management of co-occurring physical health conditions, overcome barriers to comprehensive behavioral health treatment, and ultimately contribute to a healthier, more financially stable population. 
+Synopsis of Need*
+Describe the problem and/or need that you are developing an innovative strategy to address. Please include your target population, how many people and/or organizations you estimate serving during your project period and any localized data.
+Character Limit: 3000/2823
+DuPage County is the second-most populous county in Illinois and has an estimated 56,000 uninsured residents. Extrapolating from that data, 7,148 of Milton township’s 119,146 residents are projected to lack health insurance. Silver Access provides those families with a valuable and life-saving resource that other communities lack.
+DHC thoughtfully designs programs to address health equity and improve whole person health outcomes for low-income uninsured and underinsured DuPage County residents. Our primary focus is families with incomes at or below 2.5x the federal poverty level, for a single person, which translates to income at or below $37,650. Silver Access supports individuals relying on the ACA marketplace for health insurance. Often these are individuals who work at jobs that don't confer health insurance. Their incomes are too high for Medicaid, but too low to afford high quality health insurance. DHC is not asking Milton township to pay the entire cost of those subsidies we provide. Rather, we are using national data that defines the portion of health care spending that supports behavioral health and seeking township support for that proportion.  
+It is widely understood that the United States is living through a particularly acute period of mental health crisis, and the burden of this complex problem is especially pressing for low-income families who must often make untenable choices between meeting critical needs like food, housing, and health care. Additionally, the relationship between poverty and mental health is not one-way but rather bidirectional. While poverty can lead to mental health problems, mental health issues can also lead to job loss, reduced productivity, and difficulty maintaining stable housing, thus contributing to poverty (NIH).
+Having health insurance dramatically eases the path to comprehensive mental health treatment. Silver Access makes behavioral health services and medications affordable, reducing a key barrier to mental health recovery.   The US Preventive Services Task Force has recommended universal screening for depression in all adult patients in the primary care setting, and high-quality health insurance also increases the likelihood of receiving timely screenings. Early intervention can prevent mental health conditions from escalating and can lead to better and faster mental health recovery.
+With an anticipated annual Silver Access enrollment of 800 members countywide, our July geocoding data would project that 21% of those individuals, 168 Milton township neighbors, will be served next year. By providing funds to support and ease access to comprehensive behavioral health care, the Milton Township CMHB will foster healthier neighbors who are more present, productive, and connected at home, work, and in their communities.
+Need details*
+What evidence can you provide that your proposed project will address a gap in available services? Share more about why your project is novel, necessary and non-duplicative (or critical due to unmet demand). If there are others offering a similar service to the same clients/population, what distinguishes your offering from others? Character Limit: 2000/1997
+Clients provide compelling evidence of this program's benefit. As one expressed, “My sons and I have had a few awful years due to their father’s mental illness and addiction. We got a plan with low out of pocket cost for prescriptions, doctor visits and psychiatric/ therapist appointments, thanks to Silver Access. It may have literally saved a life. We hope we will not need it in a few years, but it was life-changing to have it when we did.”
+SA enrollment has almost doubled over the last three years, placing DHC in the unenviable position of limiting enrollment. Attesting to the fact that our services are novel and non-duplicative, no other organizations provide this service in DuPage or even Illinois.  
+Health insurance affordability is projected to dramatically worsen when ACA tax credits expire in December 2025, raising consumer costs by 75%. Silver Access will become a substantially more expensive program to operate if this occurs, but DHC is committed to continuing our efforts, cognizant that limited-income families will almost certainly lose coverage without additional help.
+Here's a breakdown of how the ACA addresses mental health benefits:
+-Essential Health Benefits: Behavioral health services are considered essential health benefits under the ACA, meaning all Marketplace plans must cover them.
+-Covered Services: This includes a wide range of services such as psychotherapy and counseling, inpatient behavioral health services, substance use disorder treatment, and rehabilitative support services.
+-Parity Protections: The ACA requires that limits applied to mental health and substance use disorder services cannot be more restrictive than those applied to medical benefits. This includes financial limits (deductibles, copayments, coinsurance, out-of-pocket limits), treatment limits, and prior authorization.
+-Preventive Services: Many plans cover preventive services at no cost, including depression screenings for adults and behavioral health assessments for children.
+How many individuals will be served by this program / project?*
+Character Limit: 250
+We foresee serving 800 Silver Access individuals. Based on the geocoding of current members provided by DuPage County, we anticipate 21%, or 168 of them, will be residents of Milton Township.
+Partnership Details*
+If you have any partners that you will be working with on this Milton Township Program, please list all partners here.
+In addition, please upload letters of partnership from all key partners that you will be working with. A letter of partnership will illustrate an agreement between your organization and theirs using Milton Township funding to serve Milton Township residents. Preferred partners will be Milton Township organizations (ex. School districts: CUSD200, D41, D89, D87) .
+NOTE: Partnership letters must be on partner agency letterhead, describe the nature of the partnership and requires a signature from an authorized person from the agency.
+If your program is not partnering with any other organizations, please list "No partners".
+Character Limit: 750/727 | File Size Limit: 1 MB
+Our partners in this project include community health agencies that refer uninsured patients, 211 resource and referral platforms, and agents across the community. We don't require ongoing agreements because many of our collaborations originated twenty-five years ago and persist because they are mutually rewarding. Funds from the Milton Township CMHB would not be used to support any specific partnership, nor is project success contingent on one. As DHC and DuPage County Health Department have a mutually rewarding and closely collaborative partnership, we do have a contract that details the services provided, supporting the uninsured and underinsured residents of DuPage County. We have uploaded the most recent articulation of that agreement.
+Program/Project Outcomes*  Following is edited for 2,000 characters, more in outcome table
+What benefit is your program/project intended to provide? What results or goals are you trying to achieve? How will you measure the results of the program/project? 
+Please note:  The following reference Milton Township residents
+Objectives
+- 168 individuals will have access to essential behavioral health care through Silver Access (SA), Affordable Care Act premium subsidies.
+-100% of SA enrollees will complete a health literacy training program.
+100% of SA enrollees will agree that health literacy training was meaningful.
+100% of SA enrollees will agree that the program was helpful to them
+Outputs 
+168 individuals will receive personalized assistance enrolling in SA 
+100% of SA enrollees will be offered a comprehensive health literacy training program
+-100% of SA enrollees who participate in health literacy training will be surveyed to gather feedback on the helpfulness of the training.
+100% of SA enrollees will be surveyed to gather input on the program's helpfulness.
+Outcomes
+168 residents will have access to comprehensive behavioral health services, 
+100% of residents participating in health literacy training will gain the knowledge and skills necessary to navigate the healthcare system effectively and utilize their insurance benefits for behavioral health care.
+100% of residents participating in health literacy training will report it was meaningful.
+100% of residents enrolled in SA will report that the program was helpful, demonstrating its positive impact on their ability to access affordable, high-quality behavioral health care.
+Data Source
+The Silver Access (SA) internal database will track the number of Milton Township residents who successfully enroll in the program.
+The Silver Access (SA) internal database will track the number of people who complete health literacy training.
+Residents will be administered an annual client satisfaction survey, which will provide valuable quantitative and qualitative feedback on the health literacy training's meaningfulness.
+Residents will be administered an annual client satisfaction survey to collect quantitative and qualitative feedback on the overall helpfulness of the program.
+Use of funds*
+How will you specifically use the funds that are being requested? Please also fill out the attached Project Budget spreadsheet (linked in Supporting Materials section below) to support the budget narrative written here.
+Character Limit: 1500/1514
+National data reveal that while approximately 22% of patients may be diagnosed with a behavioral health condition, they account for over 40% of all healthcare expenditures. Given that statistic, it is reasonable to estimate that at least 20% of total health insurance premiums are directly attributed to covering behavioral health costs. 
+We are seeking $33,600 for behavioral health treatment for low-income, at-risk residents of Milton Township via our Silver Access Program. Your support will allow individuals access to subsidized, high-quality insurance plans, ensuring comprehensive mental health support, including primary care, counseling, psychiatric services, medications, and substance use recovery services. This investment will profoundly impact neighbors' mental health and wellbeing, reducing the need for costly emergency interventions, improving the management of co-occurring physical health conditions, and fostering a healthier, more financially stable community in Milton Township. A $33 ,600 award would fund a $200 per-person annual subsidy for 168 township residents who qualify for Silver Access. This request is conservative, as DHC can pay up to $1,500 per person annually.
+As noted in this application, there is a strong likelihood that ACA costs may rise as much as 75% in January 2026. We are actively anticipating this possibility, but we created this request based on current spending. We always want to be confident that our requests are substantiated by data.
+Other Funding Sources*
+Specify other funding sources (including client fees, grants, contracts, donations, private insurance, Medicaid etc..) or steps you have taken to secure additional funding to support this request.
+Character Limit: 1000
+We believe that it is crucial that individuals develop comfort with healthcare models that involve monthly payments. SA preserves the practice of individuals paying monthly costs for health insurance and ensures that families have a vested stake, while easing financial constraints that would otherwise jeopardize insurance access. 100% of our members are asked to pay a portion of the cost of their health insurance, with their portion determined by their income and the total cost of the program selected. We receive funding from all DuPage County hospitals, which we partially apply to support this program, and we have received an award from the Duly Health and Care Foundation. We were recently awarded funding through the DuPage County Board's Member Initiative Program to support Silver Access. We have pending applications to several other Township 708 boards to help support their constituents. No funding specifically directed towards Milton Township has been received.
+Funding flexibility*
+Are you willing to accept an award for less than the amount requested? If yes, how will this alter your program under a modified funding request?
+Character Limit: 1000/997
+DHC would gratefully accept any level of funding. Grant awards and donations make our work possible. This year, we unfortunately had to cap enrollment in Silver Access due to demand that exceeded funding and capacity. We anticipate the need and the costs will continue to grow. Less funding translates to less capacity, and individuals who desperately need mental health care may go without. DHC collaborates with a diversified network of funders, many of whom make substantial annual contributions, investing in our mission to impact health equity positively. Every health system in the county contributes proportionally. Other critical partners include foundations, the DuPage County Board of Health, faith organizations, and individual donors. We are dedicated to ensuring high-quality health safety net services for DuPage County residents, fostering health equity, and overcoming disparities. Subsidizing quality insurance is foundational to our mission. We are committed to making it available.
+Alignment with Milton Township CMB service objectives*
+Please describe how this program/project aligns with the Milton Township Community Mental Health Board service objectives listed in the introduction of this application.
+Character Limit: 2500/683
+Funded services may include, but are not limited to:
+Community Outreach
+Prevention and Education Programs – health insurance literacy education
+Crisis Intervention
+Individual, group, family counseling, and therapeutic interventions
+Case Management and Care Coordination
+Trauma-focused services
+Linkage to psychiatric services
+Medication and Medication Management
+Substance abuse treatment
+Aftercare services
+Prevention and Education Programs:
+Affordable access to high quality insurance is paramount for achieving comprehensive behavioral health, from prevention and education to crisis intervention and ongoing treatment. Without it, the significant costs of counseling, specialized trauma-focused services, psychiatric consultations, medication and prescription management, and substance abuse treatment become insurmountable barriers for the people we serve. Quality insurance makes these vital services financially accessible and ensures individuals can connect with appropriate care. Ultimately, quality insurance enables timely interventions, consistent treatment, and better health outcomes for Milton Township residents.
+Demographics
+What is the estimated demographic distribution you expect will be served with this funding award?
+Please enter percentages below (must add up to 100). Enter "0" if the category does not apply.
+American Indian or Alaskan Native*
+Character Limit: 4
+Asian*
+Character Limit: 4	65%
+Black or African-American*
+Character Limit: 4
+Latino/Hispanic*		12%
+Character Limit: 4
+Middle Eastern or North African*
+Character Limit: 4
+Native Hawaiian or Other Pacific Islander*
+Character Limit: 4
+White*
+Character Limit: 4			17%
+Other*					6%
+Character Limit: 4
+Demographics by Age group*
+Please designate the age group that your project / program will serve. (May choose more than one category).
+Choices
+Children (0-12)
+Adolescents (13-19)
+Young Adults (20-26) 
+Adults
+Seniors (Over 65)
+Access to non-English speakers*
+How does your organization work to ensure that your services are available to individuals who are limited English proficient? Character Limit: 2000/1090
+We're committed to ensuring every door feels like the right door, regardless of the language you speak. To achieve this, our website and Silver Access program materials are readily available in the seven most spoken languages in DuPage County, helping individuals access crucial information from the start.
+Our work extends beyond translated materials to face-to-face communication. All our team members who work directly with the public are bilingual in English and Spanish. We've cultivated a deep partnership with the DuPage Federation's Language Access Resource Center (LARC) for languages beyond English and Spanish. This collaboration allows us to arrange professional, qualified interpreters for in-person appointments or phone calls whenever appropriate.
+Navigating healthcare can be challenging, and language should never be a barrier to accessing vital behavioral health services. Our multifaceted approach ensures that individuals can understand their options, engage effectively with our services, and ultimately feel comfortable and supported. We want DHC to feel like home.
+Supporting Materials / Attachments	
+Program/Project Budget*
+Submit a program/project budget using the Project Budget form relating to the funding request, indicating how the funding requested will be used.  
+File Size Limit: 1 MB
+Current Fiscal Year Operating Budget*
+Submit a current fiscal year operating budget.
+File Size Limit: 2 MB
+990 Form
+Please upload your most recent IRS 990 or 990-EZ.
+If you do not have a IRS 990 or 990-EZ, please skip this question (this applies to government organizations; school districts, etc).
+File Size Limit: 6 MB
+Audited Financial Statement*
+Please upload your organization’s most recent audited financial statement. If you do not have an audited financial statement, please provide an explanation as to why your organization does not have one.
+Character Limit: 1000 | File Size Limit: 9 MB
+Board Members*
+Please upload a list of your board members with addresses.
+File Size Limit: 2 MB
+Staff*
+Please upload a list of management and pertinent staff members or an org chart.
+File Size Limit: 1 MB
+Additional Support/Training/Problem Solving*
+What are 1-2 pressing organizational issues that the Milton Township Mental Health Board could consider providing resources to help you solve? (i.e., workforce retention/training, shared services/collaboration, impact/evaluation, etc.)
+Character Limit: 5000
+Our current data collection tools limit DHC’s ability to capture detailed and integrated information. Investing in upgraded technology would improve our capacity to collect robust, actionable data.
+Electronic Signature	
+Electronic Signature*
+Prior to the release of any funding award, a funding recipient will be required to sign a funding agreement to use funds for the sole purpose stated in the application form. Failure to comply with the terms of the funding agreement will jeopardize any future funding awards from the Milton Township 708 Board.
+Enter your full name, business title and the date of submission. (e.g. Erin Smith, Executive Director, August 1, 2024)
+Character Limit: 250
+Certification*
+By entering your information above and clicking "I agree" below, you are certifying that:
+The information contained in this application is true and correct.
+The proposed program/project has been adopted by your organization as part of its plan of work.
+You are duly authorized to submit this application, or you have uploaded a signature page of someone who is duly authorized to submit the application on behalf of your organization.
+Your completion of this section constitutes an electronic signature.
+Choices
+I agree
+I do not agree

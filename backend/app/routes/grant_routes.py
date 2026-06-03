@@ -138,28 +138,58 @@ def _build_privacy_settings(
 
 async def process_single_file(file: UploadFile, file_num: int, total_files: int) -> UploadResponse:
     file_id, filename, text, content_warning = await _save_and_extract(file, "unknown")
-    source_documents = [SourceDocument(file_id=file_id, filename=filename, document_type="unknown")]
     settings = PrivacySettings()
+
+    # Auto-classify the document (proposal vs award letter vs combined) instead of
+    # assuming. This routes the text correctly so the award letter stays authoritative.
+    doc_kind = llm_service.classify_document(text)
+    source_documents = [SourceDocument(file_id=file_id, filename=filename, document_type=doc_kind)]
+
+    proposal_text = text if doc_kind in ("proposal", "combined") else None
+    # Treat an award letter, a combined doc, OR an unknown single upload as the
+    # authoritative award text so disambiguation rules apply.
+    award_text = text if doc_kind in ("award_letter", "combined", "unknown") else None
+
     redacted_text, redactions = privacy_service.redact_text(text, settings)
+    redacted_award_text = None
+    if award_text:
+        redacted_award_text, _ = privacy_service.redact_text(award_text, settings)
+
     grant_data = local_extraction_service.extract(
-        text,                # Always extract from raw text so redaction never hides amounts or names
+        text,                # Extract from raw text so redaction never hides amounts/names
         source_documents=source_documents,
-        proposal_text=None,
-        award_letter_text=None,
+        proposal_text=proposal_text,
+        award_letter_text=award_text,
         privacy_settings=settings,
     )
     grant_data.redacted_text = redacted_text
     grant_data.redactions = redactions
+
+    use_external_llm = settings.enable_external_llm and llm_service.is_available()
     grant_data.transmission_preview = privacy_service.build_transmission_preview(
         text,
         redacted_text,
         structured_fields_count=8,
-        external_llm_enabled=False,
+        external_llm_enabled=use_external_llm,
     )
+
+    if use_external_llm:
+        grant_data = llm_service.enrich_grant_data(
+            grant_data,
+            sanitized_text=redacted_text,
+            source_documents=source_documents,
+            award_text=redacted_award_text,
+        )
+    else:
+        # Always run validators even without an LLM so the reviewer is warned.
+        grant_data = llm_service.validate_only(
+            grant_data, award_text=redacted_award_text, sanitized_text=redacted_text,
+        )
+
     grant_data_store[file_id] = grant_data
     return UploadResponse(
         success=True,
-        message="File uploaded and locally processed successfully",
+        message="File uploaded and processed successfully",
         file_id=file_id,
         filename=filename,
         document_type=grant_data.document_type,
@@ -224,12 +254,14 @@ async def upload_grant_package(
         proposal_file_id, proposal_filename, proposal_text, w = await _save_and_extract(proposal, "proposal")
         if w:
             content_warnings.append(w)
+        proposal_kind = llm_service.classify_document(proposal_text) if proposal_text else "proposal"
         source_documents.append(SourceDocument(file_id=proposal_file_id, filename=proposal_filename, document_type="proposal"))
 
     if award_letter:
         award_file_id, award_filename, award_text, w = await _save_and_extract(award_letter, "award_letter")
         if w:
             content_warnings.append(w)
+        award_kind = llm_service.classify_document(award_text) if award_text else "award_letter"
         source_documents.append(SourceDocument(file_id=award_file_id, filename=award_filename, document_type="award_letter"))
 
     package_id = generate_file_id()
@@ -280,6 +312,11 @@ async def upload_grant_package(
             sanitized_text=redacted_text,
             source_documents=source_documents,
             award_text=redacted_award_text,
+        )
+    else:
+        # Always run validators even without an LLM so the reviewer is warned.
+        grant_data = llm_service.validate_only(
+            grant_data, award_text=redacted_award_text, sanitized_text=redacted_text,
         )
 
     grant_data_store[package_id] = grant_data
