@@ -42,6 +42,9 @@ def test_full_extraction_matches_golden(proposal_text, moa_text, expected):
     assert expected["grant_title_contains"].lower() in (out.grant_title or "").lower()
     assert any(tok in (out.grant_period or "") for tok in expected["grant_period_contains_any"])
     assert len(out.reporting_requirements) >= expected["min_reporting_requirements"]
+    if out.budget:
+        assert out.budget.total_grant_amount == expected["grant_amount"], \
+            f"budget total {out.budget.total_grant_amount} != award {expected['grant_amount']}"
 
 
 def test_regex_only_flags_the_threshold_trap(proposal_text, moa_text):

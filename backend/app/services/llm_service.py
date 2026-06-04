@@ -319,6 +319,7 @@ class LLMService:
             reporting_count=len(reporting),
             award_text=award_text,
             full_text=full_text,
+            budget_total=budget.total_grant_amount if budget else None,
         )
         if truncated:
             flags.append("Document text exceeded the LLM input cap and was truncated; "

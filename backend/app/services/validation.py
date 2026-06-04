@@ -145,11 +145,22 @@ def validate_period(period: Optional[str], award_text: str = "") -> List[str]:
 
 def validate_extraction(*, grant_amount: Optional[float], grant_period: Optional[str],
                         organization_name: Optional[str], reporting_count: int,
-                        award_text: str = "", full_text: str = "") -> List[str]:
+                        award_text: str = "", full_text: str = "",
+                        budget_total: Optional[float] = None) -> List[str]:
     """Aggregate validator. Returns a list of plain-English review flags."""
     flags: List[str] = []
     flags += validate_amount(grant_amount, award_text or full_text)
     flags += validate_period(grant_period, award_text or full_text)
+    if (budget_total is not None and grant_amount is not None
+            and budget_total > 0 and abs(budget_total - grant_amount) > 0.01):
+        flags.append(
+            f"Budget total ${budget_total:,.0f} does not match the award amount "
+            f"${grant_amount:,.0f} — the generated budget workbook would carry the "
+            f"wrong figure. Confirm both."
+        )
+    if budget_total is not None and budget_total > 0:
+        flags += [f.replace("Award amount", "Budget total")
+                  for f in validate_amount(budget_total, award_text or full_text)]
     if not organization_name:
         flags.append("Awardee / organization name was not extracted — confirm it manually.")
     if reporting_count == 0:

@@ -44,3 +44,21 @@ def test_missing_org_is_flagged(moa_text):
         organization_name=None, reporting_count=2, award_text=moa_text,
     )
     assert any("organization name" in f.lower() for f in flags)
+
+
+def test_budget_total_mismatch_is_flagged(moa_text):
+    flags = validation.validate_extraction(
+        grant_amount=33600.0, grant_period="Fiscal Year 2026",
+        organization_name="DuPage Health Coalition", reporting_count=2,
+        award_text=moa_text, budget_total=36000.0,
+    )
+    assert any("does not match the award amount" in f for f in flags)
+
+
+def test_matching_budget_total_is_clean(moa_text):
+    flags = validation.validate_extraction(
+        grant_amount=33600.0, grant_period="Fiscal Year 2026",
+        organization_name="DuPage Health Coalition", reporting_count=2,
+        award_text=moa_text, budget_total=33600.0,
+    )
+    assert flags == []
