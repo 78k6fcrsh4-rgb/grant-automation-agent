@@ -69,9 +69,29 @@ async def root():
 
 @app.get("/health")
 async def health():
+    """Health + LLM readiness diagnostics (never exposes the key itself)."""
+    key = os.getenv("OPENAI_API_KEY") or ""
+    try:
+        from langchain_openai import ChatOpenAI  # noqa: F401
+        langchain_import_ok = True
+        langchain_error = None
+    except Exception as e:
+        langchain_import_ok = False
+        langchain_error = f"{type(e).__name__}: {e}"
+
+    from app.routes.grant_routes import llm_service
     return {
         "status": "healthy",
-        "storage": "in-memory"
+        "storage": "in-memory",
+        "llm": {
+            "api_key_present": len(key) > 10,
+            "api_key_length": len(key),
+            "langchain_import_ok": langchain_import_ok,
+            "langchain_error": langchain_error,
+            "llm_available": llm_service.is_available(),
+            "model": os.getenv("OPENAI_MODEL", "gpt-4.1"),
+            "demo_mode": os.getenv("DEMO_MODE", "false"),
+        },
     }
 
 
