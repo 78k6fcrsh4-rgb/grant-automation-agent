@@ -193,8 +193,9 @@ class LLMService:
         if payload is None:
             # LLM failed/invalid JSON -> fall back to regex result, flagged.
             result = self._finalize_regex_only(base_data, award_text, sanitized_text)
-            result.validation_flags = (["LLM extraction failed; showing regex-only "
-                                        "results — review carefully."] + result.validation_flags)
+            reason = getattr(self, "_last_error", None) or "unknown error"
+            result.validation_flags = ([f"LLM extraction failed ({reason}); showing "
+                                        f"regex-only results — review carefully."] + result.validation_flags)
             return result
 
         return self._build_from_llm(
@@ -218,15 +219,18 @@ class LLMService:
         )
         msgs = [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=human)]
 
+        self._last_error = None
         for attempt in range(2):  # one retry on bad JSON
             try:
                 raw = self._llm.invoke(msgs).content
-            except Exception:
+            except Exception as e:
+                self._last_error = f"{type(e).__name__}: {str(e)[:300]}"
                 return None
             parsed = self._parse_json(raw)
             if parsed is not None:
                 return parsed
             msgs.append(HumanMessage(content="That was not valid JSON. Reply with ONLY the JSON object."))
+        self._last_error = "Model replied with invalid JSON twice"
         return None
 
     @staticmethod
