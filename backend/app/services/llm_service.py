@@ -141,6 +141,18 @@ class LLMService:
             self._llm = None
             return False
 
+    def probe(self) -> dict:
+        """Make one minimal live model call. Browser-visible end-to-end test."""
+        if DEMO_MODE:
+            return {"ok": True, "error": None, "note": "demo mode"}
+        if not self.is_available():
+            return {"ok": False, "error": "LLM not initialized (missing key or client init failed)"}
+        try:
+            resp = self._llm.invoke("Reply with the single word: OK")
+            return {"ok": True, "error": None, "reply": (resp.content or "").strip()[:40]}
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:300]}"}
+
     # ----------------------------------------------------------- classification
     def classify_document(self, text: str) -> str:
         """Classify a single document. LLM when available, heuristic fallback."""

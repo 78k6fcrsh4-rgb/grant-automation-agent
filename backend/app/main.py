@@ -9,7 +9,7 @@ load_dotenv()
 app = FastAPI(
     title="Grant Automation API",
     description="API for automating grant management tasks for nonprofits",
-    version="2.5.1"
+    version="2.5.2"
 )
 
 # --------------------------------------------------
@@ -61,14 +61,14 @@ app.include_router(grant_routes.router)
 async def root():
     return {
         "message": "Grant Automation API",
-        "version": "2.5.1",
+        "version": "2.5.2",
         "docs": "/docs",
         "database": "In-Memory (No DB)"
     }
 
 
 @app.get("/health")
-async def health():
+async def health(llm_probe: bool = False):
     """Health + LLM readiness diagnostics (never exposes the key itself)."""
     key = os.getenv("OPENAI_API_KEY") or ""
     try:
@@ -80,6 +80,7 @@ async def health():
         langchain_error = f"{type(e).__name__}: {e}"
 
     from app.routes.grant_routes import llm_service
+    probe = llm_service.probe() if llm_probe else None
     return {
         "status": "healthy",
         "storage": "in-memory",
@@ -91,6 +92,7 @@ async def health():
             "llm_available": llm_service.is_available(),
             "model": os.getenv("OPENAI_MODEL", "gpt-4.1"),
             "demo_mode": os.getenv("DEMO_MODE", "false"),
+            "probe": probe,
         },
     }
 

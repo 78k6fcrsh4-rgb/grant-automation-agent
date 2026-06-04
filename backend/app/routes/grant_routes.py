@@ -136,6 +136,41 @@ def _build_privacy_settings(
     )
 
 
+def _llm_required() -> bool:
+    """Strict mode (default ON): when AI extraction is requested, a failure
+    returns an explicit HTTP error instead of silently serving regex output.
+    Set LLM_REQUIRED=false to restore graceful regex-only fallback."""
+    return os.getenv("LLM_REQUIRED", "true").lower() == "true"
+
+
+def _raise_if_llm_unavailable(requested: bool):
+    if requested and _llm_required() and not llm_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "AI extraction was requested but the language model is not available "
+                "(OPENAI_API_KEY missing or client failed to initialize). "
+                "Fix the key configuration, or set LLM_REQUIRED=false to allow "
+                "regex-only fallback."
+            ),
+        )
+
+
+def _raise_if_llm_failed(grant_data: GrantData, requested: bool):
+    if requested and _llm_required() and grant_data.extraction_method != "llm+regex":
+        reason = next(
+            (f for f in (grant_data.validation_flags or []) if f.lower().startswith("llm extraction failed")),
+            "the model call did not complete",
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"AI extraction failed — {reason} "
+                f"Fix the underlying issue, or set LLM_REQUIRED=false to allow regex-only fallback."
+            ),
+        )
+
+
 async def process_single_file(file: UploadFile, file_num: int, total_files: int) -> UploadResponse:
     file_id, filename, text, content_warning = await _save_and_extract(file, "unknown")
     settings = PrivacySettings()
@@ -165,6 +200,7 @@ async def process_single_file(file: UploadFile, file_num: int, total_files: int)
     grant_data.redacted_text = redacted_text
     grant_data.redactions = redactions
 
+    _raise_if_llm_unavailable(settings.enable_external_llm)
     use_external_llm = settings.enable_external_llm and llm_service.is_available()
     grant_data.transmission_preview = privacy_service.build_transmission_preview(
         text,
@@ -180,6 +216,7 @@ async def process_single_file(file: UploadFile, file_num: int, total_files: int)
             source_documents=source_documents,
             award_text=redacted_award_text,
         )
+        _raise_if_llm_failed(grant_data, settings.enable_external_llm)
     else:
         # Always run validators even without an LLM so the reviewer is warned.
         grant_data = llm_service.validate_only(
@@ -298,6 +335,7 @@ async def upload_grant_package(
         grant_data.submission_requirements,
     ])
 
+    _raise_if_llm_unavailable(privacy_settings.enable_external_llm)
     use_external_llm = privacy_settings.enable_external_llm and llm_service.is_available()
     grant_data.transmission_preview = privacy_service.build_transmission_preview(
         merged_text,
@@ -313,6 +351,7 @@ async def upload_grant_package(
             source_documents=source_documents,
             award_text=redacted_award_text,
         )
+        _raise_if_llm_failed(grant_data, privacy_settings.enable_external_llm)
     else:
         # Always run validators even without an LLM so the reviewer is warned.
         grant_data = llm_service.validate_only(
