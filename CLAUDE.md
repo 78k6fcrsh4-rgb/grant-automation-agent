@@ -7,7 +7,7 @@
 - On any major/feature-level push, PROPOSE a version bump and ASK Parker to
   confirm the number before committing (e.g. "this looks like 2.6.0 — agree?").
   Patch-level fixes may bump the patch number without asking.
-- Current version: 2.5.0 (LLM-first extraction rewrite + Key Vault managed identity).
+- Current version: 2.5.1 (LLM-first extraction rewrite + Key Vault managed identity).
 
 ## Deploy facts
 - Deploys trigger ONLY on push to `main` (.github/workflows/deploy.yml).

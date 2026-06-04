@@ -9,7 +9,7 @@ load_dotenv()
 app = FastAPI(
     title="Grant Automation API",
     description="API for automating grant management tasks for nonprofits",
-    version="2.5.0"
+    version="2.5.1"
 )
 
 # --------------------------------------------------
@@ -61,7 +61,7 @@ app.include_router(grant_routes.router)
 async def root():
     return {
         "message": "Grant Automation API",
-        "version": "2.5.0",
+        "version": "2.5.1",
         "docs": "/docs",
         "database": "In-Memory (No DB)"
     }

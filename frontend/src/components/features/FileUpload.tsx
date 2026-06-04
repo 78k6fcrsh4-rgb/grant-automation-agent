@@ -14,7 +14,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
     redact_names: true,
     redact_salaries: true,
     redact_contact_details: true,
-    enable_external_llm: false,
+    enable_external_llm: true,
   });
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -104,7 +104,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
           {checkbox('redact_names', 'Redact names', 'Mask named personnel before downstream analysis.')}
           {checkbox('redact_salaries', 'Redact salaries and percentages', 'Mask salaries, fringe, and other compensation amounts.')}
           {checkbox('redact_contact_details', 'Redact contact details', 'Mask emails, phone numbers, EINs, and similar identifiers.')}
-          {checkbox('enable_external_llm', 'Allow external LLM on sanitized text', 'Off by default. When enabled, only redacted text and structured facts are eligible to leave the local app.')}
+          {checkbox('enable_external_llm', 'Allow external LLM on sanitized text', 'On by default — AI extraction is the primary engine. Only redacted text and structured facts leave the app. Uncheck to keep analysis fully local (regex-only, less accurate).')}
         </div>
       </div>
 
