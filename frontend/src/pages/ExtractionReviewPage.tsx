@@ -87,6 +87,7 @@ export const ExtractionReviewPage: React.FC = () => {
 
   const ec = data.extraction_confidence as Record<string, ExtractionField> | undefined;
   const gaps = data.data_gaps ?? [];
+  const flags = data.validation_flags ?? [];
   const docFormat = (data.document_format ?? 'unknown').replace('_', ' ');
 
   // Determine overall confidence summary
@@ -147,6 +148,23 @@ export const ExtractionReviewPage: React.FC = () => {
             <ul className="space-y-1 ml-7">
               {gaps.map((gap, i) => (
                 <li key={i} className="text-sm text-amber-700">{gap}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* ── Validation Flags (deterministic checks on the extracted values themselves) ── */}
+        {flags.length > 0 && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center mb-2">
+              <AlertCircle className="h-5 w-5 text-red-600 mr-2 flex-shrink-0" />
+              <h2 className="text-sm font-semibold text-red-800">
+                {flags.length} Value{flags.length > 1 ? 's' : ''} Need Review
+              </h2>
+            </div>
+            <ul className="space-y-1 ml-7">
+              {flags.map((flag, i) => (
+                <li key={i} className="text-sm text-red-700">{flag}</li>
               ))}
             </ul>
           </div>
