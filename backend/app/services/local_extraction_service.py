@@ -702,7 +702,19 @@ class LocalExtractionService:
                         date_m = report_date_re.search(line)
                         last.due_date = date_m.group(0) if date_m else None
 
-        return requirements[:8]
+        if requirements:
+            return requirements[:8]
+
+        # Fallback: many documents get classified as federal_noa purely because they
+        # contain the generic phrase "Notice of Award" (common outside federal grants
+        # too), but don't follow the formal "REPORTING REQUIREMENTS" section structure
+        # a true federal NOA uses. Without this fallback, such documents silently
+        # return zero reporting requirements even when the text plainly states them in
+        # prose (e.g. "Awardee is required to submit quarterly reports...") -- and the
+        # reviewer sees a false "No reporting requirements were extracted" warning.
+        # Reuse the obligation-phrase matcher that already handles this for "letter"
+        # format documents.
+        return self._extract_reporting_letter(lines)
 
     # ===== CONTRACT FORMAT EXTRACTORS =====
 
