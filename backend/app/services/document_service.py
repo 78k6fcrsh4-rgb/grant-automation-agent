@@ -100,15 +100,30 @@ class DocumentService:
         grant_title = grant_data.grant_title or "Grant Project"
         story.append(Paragraph(f"<b>{grant_title}</b>", subtitle_style))
         story.append(Spacer(1, 0.3*inch))
-        
+
+        # Cell style used for any table value that might run long — wrapping it in a
+        # Paragraph tells ReportLab to word-wrap within the column width. Plain strings
+        # passed to a Table cell are NOT wrapped; they are drawn as a single line and
+        # simply overflow past the cell/table border when they don't fit.
+        cell_style = ParagraphStyle(
+            'CellText', parent=styles['Normal'], fontSize=9, leading=12,
+        )
+        cell_style_bold = ParagraphStyle(
+            'CellTextBold', parent=cell_style, fontName='Helvetica-Bold', fontSize=10,
+        )
+
+        def _cell(text: str, bold: bool = False) -> Paragraph:
+            style = cell_style_bold if bold else cell_style
+            return Paragraph(text, style)
+
         # Grant Overview Box
         overview_data = [
             ['GRANT OVERVIEW'],
-            ['Recipient Organization:', grant_data.organization_name or 'N/A'],
-            ['Funding Agency:', grant_data.funder_name or 'N/A'],
-            ['Grant Period:', grant_data.grant_period or 'N/A'],
-            ['Total Award Amount:', f"${grant_data.grant_amount:,.2f}" if grant_data.grant_amount else 'N/A'],
-            ['Document Prepared:', datetime.now().strftime('%B %d, %Y')],
+            ['Recipient Organization:', _cell(grant_data.organization_name or 'N/A')],
+            ['Funding Agency:', _cell(grant_data.funder_name or 'N/A')],
+            ['Grant Period:', _cell(grant_data.grant_period or 'N/A')],
+            ['Total Award Amount:', _cell(f"${grant_data.grant_amount:,.2f}" if grant_data.grant_amount else 'N/A')],
+            ['Document Prepared:', _cell(datetime.now().strftime('%B %d, %Y'))],
         ]
         
         overview_table = Table(overview_data, colWidths=[2*inch, 4*inch])
@@ -136,9 +151,15 @@ class DocumentService:
             story.append(Paragraph("IMPLEMENTATION PLAN", heading2_style))
             story.append(Spacer(1, 0.2*inch))
             
+            task_header_style = ParagraphStyle(
+                'TaskHeader', parent=styles['Normal'], fontSize=11, leading=14,
+                textColor=colors.white, fontName='Helvetica-Bold',
+            )
+
             for idx, task in enumerate(grant_data.workplan.tasks, 1):
-                # Task header
-                task_header_data = [[f"ACTIVITY {idx}: {task.task_name.upper()}"]]
+                # Task header — wrapped in a Paragraph so a long task name wraps to a
+                # second line instead of overflowing past the table's right edge.
+                task_header_data = [[Paragraph(f"ACTIVITY {idx}: {task.task_name.upper()}", task_header_style)]]
                 task_header_table = Table(task_header_data, colWidths=[6.5*inch])
                 task_header_table.setStyle(TableStyle([
                     ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#4299e1')),
@@ -154,10 +175,10 @@ class DocumentService:
                 
                 # Task details
                 task_details_data = [
-                    ['Description:', task.description or 'No description provided'],
-                    ['Timeline:', f"{task.start_date or 'TBD'} to {task.end_date or 'TBD'}"],
-                    ['Responsible Party:', task.responsible_party or 'To be assigned'],
-                    ['Deliverables:', task.deliverables or 'See description'],
+                    ['Description:', _cell(task.description or 'No description provided')],
+                    ['Timeline:', _cell(f"{task.start_date or 'TBD'} to {task.end_date or 'TBD'}")],
+                    ['Responsible Party:', _cell(task.responsible_party or 'To be assigned')],
+                    ['Deliverables:', _cell(task.deliverables or 'See description')],
                 ]
                 
                 task_details_table = Table(task_details_data, colWidths=[1.5*inch, 5*inch])
@@ -208,7 +229,7 @@ class DocumentService:
                 for item in sorted(items, key=lambda x: self._parse_date_safe(x.date)):
                     timeline_data.append([
                         item.date,
-                        item.description,
+                        _cell(item.description),
                         item.amount or '-'
                     ])
                 
