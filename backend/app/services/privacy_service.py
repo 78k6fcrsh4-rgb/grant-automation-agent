@@ -11,10 +11,13 @@ _SALARY_INDICATOR = re.compile(
 )
 
 # Lines that contain these words are grant-award lines — amounts on them must NOT be redacted
-# even if redact_salaries is on.
+# even if redact_salaries is on. "disbursement"/"allocation" require a total/amount
+# qualifier (not bare) so ordinary process language ("submit disbursement invoice") doesn't
+# suppress redaction of a real stipend/salary figure that happens to share the line.
 _AWARD_INDICATOR = re.compile(
     r"\b(?:award(?:ed)?(?:\s+amount)?|grant(?:\s+amount)?|total\s+award|total\s+grant"
-    r"|disbursement|allocation|budget\s+total|award\s+total|contract\s+amount"
+    r"|total\s+disbursement|disbursement\s+amount|total\s+allocation|allocation\s+amount"
+    r"|budget\s+total|award\s+total|contract\s+amount"
     r"|approved\s+amount|grant\s+of|amount\s+of\s+\$|amount:\s*\$)\b",
     re.IGNORECASE,
 )
