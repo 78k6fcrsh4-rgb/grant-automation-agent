@@ -207,14 +207,22 @@ class LocalExtractionService:
         (FAIN, 2 CFR 200, etc.) in their compliance boilerplate, which would
         otherwise cause a false federal_noa match.  Explicit party-labeling signals
         like '(Grantee)' and 'GRANT AGREEMENT\\nBETWEEN' are stronger than FAIN.
+
+        "AWARDEE" is treated as a synonym for "GRANTEE" here -- it's the more common
+        term in plain-language award letters/MOAs (as opposed to formal legal
+        agreements), and documents using it were previously falling through to
+        federal_noa/letter format and never reaching the grantee/funder extractors
+        that understand this quoted-role-tag structure at all.
         """
         text_upper = text.upper()
 
         # Grant agreements: check FIRST -- explicit party labels are the strongest signal.
+        # "GRANTER" is tolerated as a common misspelling of "GRANTOR" alongside it.
         if (
-            ("GRANTEE:" in text_upper and "GRANTOR:" in text_upper)
-            or re.search(r'\(["""]?GRANTEE["""]?\)', text_upper)
-            or ("BETWEEN" in text_upper and "GRANTOR" in text_upper)
+            ("GRANTEE:" in text_upper and re.search(r"GRANT[OE]R:", text_upper))
+            or ("AWARDEE:" in text_upper and re.search(r"GRANT[OE]R:", text_upper))
+            or re.search(r'\(["\u201c\u201d]?(?:GRANTEE|AWARDEE)["\u201c\u201d]?\)', text_upper)
+            or ("BETWEEN" in text_upper and re.search(r"GRANT[OE]R", text_upper))
             or re.search(r'GRANT AGREEMENT\s*\n\s*BETWEEN', text_upper)
         ):
             return "grant_agreement"
@@ -791,9 +799,9 @@ class LocalExtractionService:
             re.IGNORECASE,
         )
 
-        # 1. GRANTEE: label -- value inline or on next line
+        # 1. GRANTEE: / AWARDEE: label -- value inline or next line ("Awardee" is the plain-language term)
         for i, line in enumerate(lines):
-            if re.match(r"^\s*GRANTEE\s*:", line, re.IGNORECASE):
+            if re.match(r"^\s*(?:GRANTEE|AWARDEE)\s*:", line, re.IGNORECASE):
                 parts = line.split(":", 1)
                 val = parts[1].strip() if len(parts) > 1 else ""
                 if not val and i + 1 < len(lines):
@@ -801,16 +809,16 @@ class LocalExtractionService:
                 if val and len(val) > 3 and not re.match(r"^\d+$", val) and not _structural_re.match(val):
                     return (val[:120], ExtractionConfidence.CONFIRMED)
 
-        # 2. "(Grantee)" or '("Grantee")' inline -- the preceding text is the org name
-        #    Handles both bare (Grantee) and quoted ("Grantee") forms
+        # 2. "(Grantee)"/"(Awardee)" inline -- preceding text is the org name; capture stops at a sentence break so "Notice of award. Org (\"Awardee\")" doesn't bleed backward
         for line in lines:
             m = re.search(
-                r'([A-Z][A-Za-z &,\'.]+?)\s*\(["\u201c\u201d]?Grantee["\u201c\u201d]?\)',
+                r'([A-Z](?:[A-Za-z &,\']|\.(?!\s))*?)\s*\((?:["\u201c\u201d]?Grantee["\u201c\u201d]?|["\u201c\u201d]Awardee["\u201c\u201d])\)',
                 line,
             )
             if m:
                 candidate = m.group(1).strip().rstrip(",").strip()
-                if len(candidate) > 4:
+                # Upper bound guards against the capture bleeding across an unrelated preceding clause with no sentence-break to stop it
+                if 4 < len(candidate) <= 60:
                     return (candidate[:120], ExtractionConfidence.CONFIRMED)
 
         # 3. BETWEEN … AND … structure -- grantee follows the "AND" separator
@@ -831,9 +839,9 @@ class LocalExtractionService:
 
     def _extract_funder_grant_agreement(self, lines: List[str]) -> Tuple[Optional[str], ExtractionConfidence]:
         """Extract funder/grantor from grant agreement format."""
-        # 1. GRANTOR: label -- value inline or on next line
+        # 1. GRANTOR: / FUNDER: / AWARDING AGENCY: label -- value inline or next line ("GRANTOR" tolerates the "GRANTER" misspelling)
         for i, line in enumerate(lines):
-            if re.match(r"^\s*GRANTOR\s*:", line, re.IGNORECASE):
+            if re.match(r"^\s*(?:GRANT[OE]R|FUNDER|AWARDING\s+AGENCY)\s*:", line, re.IGNORECASE):
                 parts = line.split(":", 1)
                 val = parts[1].strip() if len(parts) > 1 else ""
                 if not val and i + 1 < len(lines):
@@ -841,15 +849,16 @@ class LocalExtractionService:
                 if val and len(val) > 3 and not re.match(r"^\d+$", val):
                     return (val[:120], ExtractionConfidence.CONFIRMED)
 
-        # 2. "(Grantor)" or '("Grantor")' inline
+        # 2. "(Grantor)"/"(Granter)"/"(Funder)"/"(Awarding Agency)" inline -- same sentence-break guard as the grantee pattern above; "Grantor" tolerates the "Granter" misspelling
         for line in lines:
             m = re.search(
-                r'([A-Z][A-Za-z &,\'.]+?)\s*\([""]?Grantor[""]?\)',
+                r'([A-Z](?:[A-Za-z &,\']|\.(?!\s))*?)\s*\((?:["\u201c\u201d]?(?:Grantor|Granter)["\u201c\u201d]?|["\u201c\u201d](?:Funder|Awarding\s+Agency)["\u201c\u201d])\)',
                 line,
             )
             if m:
                 candidate = m.group(1).strip().rstrip(",").strip()
-                if len(candidate) > 4:
+                # Upper bound guards against the capture bleeding across an unrelated preceding clause with no sentence-break to stop it
+                if 4 < len(candidate) <= 60:
                     return (candidate[:120], ExtractionConfidence.CONFIRMED)
 
         # 3. BETWEEN … AND … structure -- grantor is the party named AFTER "BETWEEN"
