@@ -985,7 +985,7 @@ class DocumentService:
                     and abs((self._parse_date_safe(req.due_date) - event_date).days) <= disbursement_reminder_days
                 ]
 
-                # This .ics leaves the app on download; salary-only redaction, keep contact info actionable
+                # This .ics leaves the app on download; salary-only redaction, keep contact info actionable (EIN/SSN split: TODO)
                 calendar_privacy_settings = grant_data.privacy_settings.model_copy(
                     update={"redact_contact_details": False, "redact_names": False}
                 )
@@ -994,9 +994,14 @@ class DocumentService:
                     self.privacy_service.redact_text(m, calendar_privacy_settings)[0] for m in matching
                 ]
 
+                # item.amount is a separate raw field; mask it too if its value got redacted out of the description
+                safe_amount = item.amount
+                if item.amount and item.amount in item.description and item.amount not in safe_description:
+                    safe_amount = "[REDACTED]"
+
                 desc_parts = [safe_description]
-                if item.amount:
-                    desc_parts.append(f"Amount: {item.amount}")
+                if safe_amount:
+                    desc_parts.append(f"Amount: {safe_amount}")
                 if safe_matching:
                     desc_parts.append("Funder requirements:\n" + "\n".join(f"- {m}" for m in safe_matching))
                 desc_parts.append(default_checklist)
@@ -1040,7 +1045,7 @@ class DocumentService:
 
         event_counter = 0
 
-        # This .ics leaves the app on download; salary-only redaction, keep contact info actionable
+        # This .ics leaves the app on download; salary-only redaction,
         calendar_privacy_settings = grant_data.privacy_settings.model_copy(
             update={"redact_contact_details": False, "redact_names": False}
         )
