@@ -15,6 +15,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from icalendar import Calendar, Event, Alarm
 from datetime import datetime, timedelta
 from app.models.schemas import GrantData
+from app.services.privacy_service import PrivacyService
 from typing import Dict, List, Optional
 import os
 import re
@@ -25,6 +26,7 @@ class DocumentService:
 
     def __init__(self, temp_dir: str = "temp_files"):
         self.temp_dir = temp_dir
+        self.privacy_service = PrivacyService()
         os.makedirs(temp_dir, exist_ok=True)
 
     def _make_file_slug(self, grant_data: GrantData) -> str:
@@ -172,8 +174,8 @@ class DocumentService:
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
                 ]))
                 story.append(task_header_table)
-                
-                # Task details
+
+                # Task details — Each value is wrapped in a Paragraph
                 task_details_data = [
                     ['Description:', _cell(task.description or 'No description provided')],
                     ['Timeline:', _cell(f"{task.start_date or 'TBD'} to {task.end_date or 'TBD'}")],
@@ -982,15 +984,25 @@ class DocumentService:
                     if req.due_date and req.instructions
                     and abs((self._parse_date_safe(req.due_date) - event_date).days) <= disbursement_reminder_days
                 ]
-                desc_parts = [item.description]
+
+                # This .ics leaves the app on download; salary-only redaction, keep contact info actionable
+                calendar_privacy_settings = grant_data.privacy_settings.model_copy(
+                    update={"redact_contact_details": False, "redact_names": False}
+                )
+                safe_description, _ = self.privacy_service.redact_text(item.description, calendar_privacy_settings)
+                safe_matching = [
+                    self.privacy_service.redact_text(m, calendar_privacy_settings)[0] for m in matching
+                ]
+
+                desc_parts = [safe_description]
                 if item.amount:
                     desc_parts.append(f"Amount: {item.amount}")
-                if matching:
-                    desc_parts.append("Funder requirements:\n" + "\n".join(f"- {m}" for m in matching))
+                if safe_matching:
+                    desc_parts.append("Funder requirements:\n" + "\n".join(f"- {m}" for m in safe_matching))
                 desc_parts.append(default_checklist)
 
                 event = self._build_event(
-                    summary=f"[DISBURSEMENT] {item.description}",
+                    summary=f"[DISBURSEMENT] {safe_description}",
                     description='\n\n'.join(desc_parts),
                     start_dt=event_date,
                     end_dt=event_date + timedelta(days=1),
@@ -1028,6 +1040,11 @@ class DocumentService:
 
         event_counter = 0
 
+        # This .ics leaves the app on download; salary-only redaction, keep contact info actionable
+        calendar_privacy_settings = grant_data.privacy_settings.model_copy(
+            update={"redact_contact_details": False, "redact_names": False}
+        )
+
         # Primary source: extracted reporting requirements
         for req in (grant_data.reporting_requirements or []):
             if not req.due_date:
@@ -1050,11 +1067,14 @@ class DocumentService:
                     "□ Supporting documentation (photos, testimonials, etc.)"
                 )
 
+            safe_req_description, _ = self.privacy_service.redact_text(
+                req.description or "", calendar_privacy_settings
+            )
             period_label = f" ({req.period})" if req.period else ""
-            desc = f"{req.description or 'Progress report'}{period_label}\n\n{elements_text}"
+            desc = f"{safe_req_description or 'Progress report'}{period_label}\n\n{elements_text}"
 
             event = self._build_event(
-                summary=f"[REPORT DUE] {req.description or 'Progress Report'}",
+                summary=f"[REPORT DUE] {safe_req_description or 'Progress Report'}",
                 description=desc,
                 start_dt=event_date,
                 end_dt=event_date + timedelta(days=1),
@@ -1075,8 +1095,11 @@ class DocumentService:
                 continue
             seen_dates.add(event_date.date())
 
+            safe_item_description, _ = self.privacy_service.redact_text(
+                item.description, calendar_privacy_settings
+            )
             desc = (
-                f"{item.description}\n\n"
+                f"{safe_item_description}\n\n"
                 "STANDARD REPORT ELEMENTS\n"
                 "□ Progress against project goals and milestones\n"
                 "□ Budget vs. actuals (with narrative for variances)\n"
@@ -1084,7 +1107,7 @@ class DocumentService:
                 "□ Planned activities for the next period"
             )
             event = self._build_event(
-                summary=f"[REPORT DUE] {item.description}",
+                summary=f"[REPORT DUE] {safe_item_description}",
                 description=desc,
                 start_dt=event_date,
                 end_dt=event_date + timedelta(days=1),
