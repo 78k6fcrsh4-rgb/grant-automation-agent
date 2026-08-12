@@ -79,7 +79,7 @@ class LocalExtractionService:
         elif auth_fmt == "grant_agreement":
             organization_name, org_confidence = self._extract_grantee_grant_agreement(auth_lines)
             funder_name, funder_confidence   = self._extract_funder_grant_agreement(auth_lines)
-            grant_title, title_confidence    = self._extract_grant_title_grant_agreement(auth_lines, auth_text)
+            grant_title, title_confidence    = self._extract_grant_title_grant_agreement(auth_lines, auth_text, organization_name)
             grant_name, grant_name_confidence = grant_title, title_confidence
         elif auth_fmt == "contract":
             organization_name, org_confidence = self._extract_grantee_contract(auth_lines)
@@ -89,7 +89,7 @@ class LocalExtractionService:
         else:  # letter format (default)
             organization_name, org_confidence = self._extract_grantee_letter(auth_lines)
             funder_name, funder_confidence   = self._extract_funder_letter(auth_lines, auth_text)
-            grant_title, title_confidence    = self._extract_grant_title_letter(auth_lines, auth_text)
+            grant_title, title_confidence    = self._extract_grant_title_letter(auth_lines, auth_text, organization_name)
             grant_name, grant_name_confidence = grant_title, title_confidence
 
         # If the award letter didn't yield a title (common for short contracts/letters),
@@ -99,13 +99,13 @@ class LocalExtractionService:
                 grant_title, title_confidence = self._extract_grant_title_federal(lines)
                 grant_name, grant_name_confidence = self._extract_grant_name_federal(lines)
             elif auth_fmt == "grant_agreement":
-                grant_title, title_confidence = self._extract_grant_title_grant_agreement(lines, text)
+                grant_title, title_confidence = self._extract_grant_title_grant_agreement(lines, text, organization_name)
                 grant_name, grant_name_confidence = grant_title, title_confidence
             elif auth_fmt == "contract":
                 grant_title, title_confidence = self._extract_grant_title_contract(lines)
                 grant_name, grant_name_confidence = grant_title, title_confidence
             else:
-                grant_title, title_confidence = self._extract_grant_title_letter(lines, text)
+                grant_title, title_confidence = self._extract_grant_title_letter(lines, text, organization_name)
                 grant_name, grant_name_confidence = grant_title, title_confidence
 
         # Purpose: use merged text so the proposal's richer narrative fills in what
@@ -374,7 +374,7 @@ class LocalExtractionService:
 
         return (None, ExtractionConfidence.MISSING)
 
-    def _extract_grant_title_letter(self, lines: List[str], text: str) -> Tuple[Optional[str], ExtractionConfidence]:
+    def _extract_grant_title_letter(self, lines: List[str], text: str, organization_name: Optional[str] = None) -> Tuple[Optional[str], ExtractionConfidence]:
         """Extract grant title from letter format."""
         # "application titled X" / "project titled X" / "titled 'X'"
         m = re.search(
@@ -417,6 +417,12 @@ class LocalExtractionService:
                     continue
                 # Skip salutation lines
                 if re.match(r"Dear\b", line, re.IGNORECASE):
+                    continue
+                # Skip letterhead-field labels (Attn:, Re:, etc.) -- not a title
+                if re.match(r"^(?:Attn|Attention|Re|RE)\s*:", line, re.IGNORECASE):
+                    continue
+                # Skip lines that just echo the already-extracted org name -- not a real title
+                if organization_name and line.strip().rstrip(",") == organization_name.strip():
                     continue
                 return (line, ExtractionConfidence.INFERRED)
 
@@ -873,7 +879,7 @@ class LocalExtractionService:
         # Fallback
         return self._extract_funder_letter(lines, "\n".join(lines))
 
-    def _extract_grant_title_grant_agreement(self, lines: List[str], text: str) -> Tuple[Optional[str], ExtractionConfidence]:
+    def _extract_grant_title_grant_agreement(self, lines: List[str], text: str, organization_name: Optional[str] = None) -> Tuple[Optional[str], ExtractionConfidence]:
         """Extract grant/program title from grant agreement format."""
         # Label prefix pattern to strip from values like
         # "FEDERAL PROGRAM NAME: STATE PROGRAM NAME: ILLINOIS YOUTH INVESTMENT PROGRAM"
@@ -896,7 +902,7 @@ class LocalExtractionService:
                     return (val[:160], ExtractionConfidence.CONFIRMED)
 
         # Fallback to letter method
-        return self._extract_grant_title_letter(lines, text)
+        return self._extract_grant_title_letter(lines, text, organization_name)
 
     def _extract_purpose_grant_agreement(self, lines: List[str], text: str) -> Tuple[Optional[str], ExtractionConfidence]:
         """Extract purpose from grant agreement format."""
