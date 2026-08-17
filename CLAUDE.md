@@ -11,7 +11,7 @@
 - On any major/feature-level push, PROPOSE a version bump and ASK Parker to
   confirm the number before committing (e.g. "this looks like 2.6.0 — agree?").
   Patch-level fixes may bump the patch number without asking.
-- Current version: 2.7.0 (forget-by-design: ephemeral grant data + TTL purge).
+- Current version: 2.7.1 (env-based admin auto-seed for easy deployment).
 
 ## Deploy facts
 - Deploys trigger ONLY on push to `main` (.github/workflows/deploy.yml).

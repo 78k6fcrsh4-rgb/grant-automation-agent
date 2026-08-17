@@ -26,6 +26,12 @@ async def _purge_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    # Optional: auto-create the first admin from env (idempotent).
+    try:
+        from app.services.bootstrap import seed_from_env
+        seed_from_env()
+    except Exception:
+        pass
     # On boot, wipe any orphaned files from a previous run — the in-memory index
     # that referenced them is gone, so they are unreferenced PII.
     from app.routes import grant_routes
@@ -41,7 +47,7 @@ app = FastAPI(
     lifespan=lifespan,
     title="Grant Automation API",
     description="API for automating grant management tasks for nonprofits",
-    version="2.7.0"
+    version="2.7.1"
 )
 
 # --------------------------------------------------
@@ -95,7 +101,7 @@ app.include_router(auth_routes.router)
 async def root():
     return {
         "message": "Grant Automation API",
-        "version": "2.7.0",
+        "version": "2.7.1",
         "docs": "/docs",
         "database": "In-Memory (No DB)"
     }
