@@ -163,7 +163,7 @@ export const ExtractionReviewPage: React.FC = () => {
               </h2>
             </div>
             <ul className="space-y-1 ml-7">
-              {flags.map((flag, i) => (
+              {flags.map((flag: string, i: number) => (
                 <li key={i} className="text-sm text-red-700">{flag}</li>
               ))}
             </ul>

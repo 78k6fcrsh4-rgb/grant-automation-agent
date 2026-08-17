@@ -1,15 +1,24 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import grant_routes
+from app.routes import grant_routes, auth_routes
+from app.db import init_db
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Grant Automation API",
     description="API for automating grant management tasks for nonprofits",
-    version="2.5.2"
+    version="2.6.0"
 )
 
 # --------------------------------------------------
@@ -55,13 +64,15 @@ app.add_middleware(
 # --------------------------------------------------
 
 app.include_router(grant_routes.router)
+app.include_router(auth_routes.router)
+
 
 
 @app.get("/")
 async def root():
     return {
         "message": "Grant Automation API",
-        "version": "2.5.2",
+        "version": "2.6.0",
         "docs": "/docs",
         "database": "In-Memory (No DB)"
     }

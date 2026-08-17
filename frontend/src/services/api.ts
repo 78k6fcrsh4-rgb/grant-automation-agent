@@ -17,6 +17,36 @@ const api = axios.create({
   },
 });
 
+// ---- Auth token handling (portable: JWT in localStorage) ----
+const TOKEN_KEY = 'gaa_token';
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export const setToken = (t: string) => localStorage.setItem(TOKEN_KEY, t);
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+
+// Attach the bearer token to every request.
+api.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers = config.headers ?? {};
+    (config.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// On 401, drop the token and bounce to login (unless we're already there).
+api.interceptors.response.use(
+  (r) => r,
+  (error) => {
+    if (error?.response?.status === 401) {
+      clearToken();
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.assign('/login');
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const grantApi = {
   uploadGrantLetter: async (file: File): Promise<UploadResponse> => {
     const formData = new FormData();
@@ -84,3 +114,31 @@ export const grantApi = {
 };
 
 export default api;
+
+
+// ---- Authentication API ----
+export interface AuthUser {
+  id: number;
+  tenant_id: number;
+  email: string;
+  full_name?: string | null;
+  role: string;
+  is_active: boolean;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+}
+
+export const authApi = {
+  login: async (email: string, password: string): Promise<LoginResponse> => {
+    const res = await api.post<LoginResponse>('/api/auth/login', { email, password });
+    return res.data;
+  },
+  me: async (): Promise<AuthUser> => {
+    const res = await api.get<AuthUser>('/api/auth/me');
+    return res.data;
+  },
+};

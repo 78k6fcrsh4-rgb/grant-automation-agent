@@ -120,6 +120,10 @@ export interface GrantData {
   document_format?: string;
   extraction_confidence?: Record<string, ExtractionField>;
   data_gaps?: string[];
+  // LLM-first extraction metadata
+  validation_flags?: string[];
+  extraction_method?: string;
+  field_provenance?: Record<string, { value?: string; confidence?: string; source_document?: string; quote?: string }>;
 }
 
 export interface UploadResponse {

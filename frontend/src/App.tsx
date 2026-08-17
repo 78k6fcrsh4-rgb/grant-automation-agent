@@ -4,6 +4,9 @@ import { HomePage } from './pages/HomePage';
 import { GrantDetailsPage } from './pages/GrantDetailsPage';
 import { GrantListPage } from './pages/GrantListPage';
 import { ExtractionReviewPage } from './pages/ExtractionReviewPage';
+import { LoginPage } from './pages/LoginPage';
+import { AuthProvider } from './context/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,14 +21,17 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Router>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/grants" element={<GrantListPage />} />
-          <Route path="/grant/:fileId" element={<GrantDetailsPage />} />
-          <Route path="/grant/:fileId/review" element={<ExtractionReviewPage />} />
-        </Routes>
-      </Router>
+      <AuthProvider>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
+            <Route path="/grants" element={<ProtectedRoute><GrantListPage /></ProtectedRoute>} />
+            <Route path="/grant/:fileId" element={<ProtectedRoute><GrantDetailsPage /></ProtectedRoute>} />
+            <Route path="/grant/:fileId/review" element={<ProtectedRoute><ExtractionReviewPage /></ProtectedRoute>} />
+          </Routes>
+        </Router>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

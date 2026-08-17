@@ -31,3 +31,7 @@ frontend/dist/
 *.swp
 .idea/
 .vscode/
+
+# Local SQLite auth DB (never commit user data)
+backend/data/
+*.db

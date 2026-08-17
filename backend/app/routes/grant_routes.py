@@ -1,5 +1,7 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Depends
 from fastapi.responses import FileResponse
+from app.deps import get_current_user
+from app.models.db_models import User
 from app.models.schemas import (
     UploadResponse,
     GenerateDocumentsRequest,
@@ -21,11 +23,20 @@ router = APIRouter(prefix="/api/grants", tags=["grants"])
 
 grant_data_store: Dict[str, GrantData] = {}
 generated_docs_store: Dict[str, Dict[str, str]] = {}
+# Maps grant/package id -> owning tenant_id, so each org sees only its own grants.
+grant_tenant: Dict[str, int] = {}
 
 llm_service = LLMService()
 document_service = DocumentService()
 privacy_service = PrivacyService()
 local_extraction_service = LocalExtractionService()
+
+
+def _check_access(file_id: str, user: User):
+    """404 if the grant doesn't belong to the caller's tenant (don't leak existence)."""
+    owner = grant_tenant.get(file_id)
+    if owner is not None and owner != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Grant data not found")
 
 
 def _ocr_pdf_text(filepath: str, max_pages: int = 5) -> str:
@@ -171,7 +182,7 @@ def _raise_if_llm_failed(grant_data: GrantData, requested: bool):
         )
 
 
-async def process_single_file(file: UploadFile, file_num: int, total_files: int) -> UploadResponse:
+async def process_single_file(file: UploadFile, file_num: int, total_files: int, tenant_id: int) -> UploadResponse:
     file_id, filename, text, content_warning = await _save_and_extract(file, "unknown")
     settings = PrivacySettings()
 
@@ -224,6 +235,7 @@ async def process_single_file(file: UploadFile, file_num: int, total_files: int)
         )
 
     grant_data_store[file_id] = grant_data
+    grant_tenant[file_id] = tenant_id
     return UploadResponse(
         success=True,
         message="File uploaded and processed successfully",
@@ -235,7 +247,7 @@ async def process_single_file(file: UploadFile, file_num: int, total_files: int)
 
 
 @router.post("/upload", response_model=List[UploadResponse])
-async def upload_grant_letters(files: List[UploadFile] = File(...)):
+async def upload_grant_letters(files: List[UploadFile] = File(...), user: User = Depends(get_current_user)):
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
     if len(files) > 10:
@@ -244,7 +256,7 @@ async def upload_grant_letters(files: List[UploadFile] = File(...)):
     results: List[UploadResponse] = []
     for idx, file in enumerate(files, 1):
         try:
-            results.append(await process_single_file(file, idx, len(files)))
+            results.append(await process_single_file(file, idx, len(files), user.tenant_id))
         except Exception as e:
             results.append(
                 UploadResponse(
@@ -266,6 +278,7 @@ async def upload_grant_package(
     redact_salaries: bool = Form(True),
     redact_contact_details: bool = Form(True),
     enable_external_llm: bool = Form(True),
+    user: User = Depends(get_current_user),
 ):
     if not proposal and not award_letter:
         raise HTTPException(status_code=400, detail="Upload at least a proposal or an award letter")
@@ -359,6 +372,7 @@ async def upload_grant_package(
         )
 
     grant_data_store[package_id] = grant_data
+    grant_tenant[package_id] = user.tenant_id
 
     message = "Grant package uploaded and locally processed successfully"
     if use_external_llm:
@@ -379,16 +393,19 @@ async def upload_grant_package(
 
 
 @router.get("/data/{file_id}")
-async def get_grant_data(file_id: str):
+async def get_grant_data(file_id: str, user: User = Depends(get_current_user)):
+    _check_access(file_id, user)
     if file_id not in grant_data_store:
         raise HTTPException(status_code=404, detail="Grant data not found")
     return grant_data_store[file_id]
 
 
 @router.get("/list")
-async def list_grants():
+async def list_grants(user: User = Depends(get_current_user)):
     grants = []
     for file_id, grant_data in grant_data_store.items():
+        if grant_tenant.get(file_id) != user.tenant_id:
+            continue
         grants.append(
             {
                 "file_id": file_id,
@@ -404,7 +421,8 @@ async def list_grants():
 
 
 @router.post("/generate-documents/{file_id}")
-async def generate_documents(file_id: str, request: GenerateDocumentsRequest):
+async def generate_documents(file_id: str, request: GenerateDocumentsRequest, user: User = Depends(get_current_user)):
+    _check_access(file_id, user)
     if file_id not in grant_data_store:
         raise HTTPException(status_code=404, detail="Grant data not found")
 
@@ -443,7 +461,8 @@ async def generate_documents(file_id: str, request: GenerateDocumentsRequest):
 
 
 @router.get("/download/{file_id}/{doc_type}")
-async def download_document(file_id: str, doc_type: str):
+async def download_document(file_id: str, doc_type: str, user: User = Depends(get_current_user)):
+    _check_access(file_id, user)
     extensions = {
         "workplan": ".pdf",
         "budget": ".xlsx",
@@ -482,7 +501,9 @@ async def download_document(file_id: str, doc_type: str):
 
 
 @router.delete("/{file_id}")
-async def delete_grant(file_id: str):
+async def delete_grant(file_id: str, user: User = Depends(get_current_user)):
+    _check_access(file_id, user)
+    grant_tenant.pop(file_id, None)
     grant_data = grant_data_store.pop(file_id, None)
     generated_docs = generated_docs_store.pop(file_id, {})
 
