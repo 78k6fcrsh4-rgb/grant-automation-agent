@@ -1,9 +1,13 @@
 # Project notes for Claude
 
 ## Versioning policy
-- The app version lives in THREE places that must stay in sync:
-  `frontend/package.json`, `backend/app/__init__.py` (`__version__`), and
-  `backend/app/main.py` (FastAPI `version=` and the root endpoint response).
+- The app version lives in FOUR places that must stay in sync:
+  `frontend/package.json`, `backend/app/__init__.py` (`__version__`),
+  `backend/app/main.py` (FastAPI `version=` and the root endpoint response),
+  and `frontend/package-lock.json` (root `version` + `packages[""].version`).
+- After ANY frontend version bump, run `cd frontend && npm install` so
+  package-lock.json stays in sync. The frontend Docker build runs `npm ci`,
+  which FAILS the deploy if the lockfile is out of sync with package.json.
 - On any major/feature-level push, PROPOSE a version bump and ASK Parker to
   confirm the number before committing (e.g. "this looks like 2.6.0 — agree?").
   Patch-level fixes may bump the patch number without asking.
