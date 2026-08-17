@@ -48,7 +48,9 @@ would be wiped on every deploy, erasing all users. Choose one:
 Set `SECRET_KEY` as a Container App secret (same pattern as the OpenAI key —
 Key Vault reference is ideal).
 
-## Note: grants are still in-memory
-User accounts are now durable, but **grant data is still stored in memory** and
-resets on deploy. Persisting grants per-tenant in the database is the natural
-next step (and pairs with the multi-replica fix noted in the original review).
+## Note: grant data is intentionally ephemeral
+User accounts are durable (needed for login), but **grant data is deliberately
+transient** — held in memory, auto-purged after an idle window, never written to
+a database. This is by design; see DATA_HANDLING.md. Run the backend as a single
+replica (or with session affinity) so a session's follow-up requests reach the
+same process.

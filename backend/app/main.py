@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,17 +9,39 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+PURGE_INTERVAL_SECONDS = int(os.getenv("PURGE_INTERVAL_SECONDS", "300"))
+
+
+async def _purge_loop():
+    """Periodically forget idle grant data (ephemeral by design)."""
+    from app.routes import grant_routes
+    while True:
+        await asyncio.sleep(PURGE_INTERVAL_SECONDS)
+        try:
+            grant_routes.purge_expired()
+        except Exception:
+            pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    yield
+    # On boot, wipe any orphaned files from a previous run — the in-memory index
+    # that referenced them is gone, so they are unreferenced PII.
+    from app.routes import grant_routes
+    grant_routes.clear_temp_dir()
+    task = asyncio.create_task(_purge_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
 
 
 app = FastAPI(
     lifespan=lifespan,
     title="Grant Automation API",
     description="API for automating grant management tasks for nonprofits",
-    version="2.6.0"
+    version="2.7.0"
 )
 
 # --------------------------------------------------
@@ -72,7 +95,7 @@ app.include_router(auth_routes.router)
 async def root():
     return {
         "message": "Grant Automation API",
-        "version": "2.6.0",
+        "version": "2.7.0",
         "docs": "/docs",
         "database": "In-Memory (No DB)"
     }

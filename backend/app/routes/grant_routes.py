@@ -18,6 +18,8 @@ from app.utils.file_helpers import save_uploaded_file, extract_text_from_file, e
 from typing import Dict, List, Optional
 import io
 import os
+import time
+import glob
 
 router = APIRouter(prefix="/api/grants", tags=["grants"])
 
@@ -25,6 +27,61 @@ grant_data_store: Dict[str, GrantData] = {}
 generated_docs_store: Dict[str, Dict[str, str]] = {}
 # Maps grant/package id -> owning tenant_id, so each org sees only its own grants.
 grant_tenant: Dict[str, int] = {}
+# --- Ephemeral / "forget-by-design" state ---
+# Grant data lives only in memory and is purged after a short idle window. It is
+# never written to a durable database — the app is a tool to manage a grant when
+# it is awarded, not a system of record.
+grant_created_at: Dict[str, float] = {}
+GRANT_TTL_SECONDS = int(os.getenv("GRANT_TTL_MINUTES", "120")) * 60
+TEMP_DIR = "temp_files"
+
+
+def _touch(file_id: str) -> None:
+    """(Re)start the idle clock for a grant — called on create and on each access
+    so an active session is never purged mid-use (sliding expiration)."""
+    grant_created_at[file_id] = time.time()
+
+
+def _delete_generated_files(file_id: str) -> None:
+    for path in (generated_docs_store.get(file_id) or {}).values():
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except OSError:
+            pass
+
+
+def _forget(file_id: str) -> None:
+    """Erase every trace of one grant: in-memory records + generated files."""
+    _delete_generated_files(file_id)
+    grant_data_store.pop(file_id, None)
+    generated_docs_store.pop(file_id, None)
+    grant_tenant.pop(file_id, None)
+    grant_created_at.pop(file_id, None)
+
+
+def purge_expired() -> int:
+    """Forget grants idle longer than GRANT_TTL_SECONDS. Returns count purged."""
+    now = time.time()
+    expired = [fid for fid, ts in list(grant_created_at.items())
+               if now - ts > GRANT_TTL_SECONDS]
+    for fid in expired:
+        _forget(fid)
+    return len(expired)
+
+
+def clear_temp_dir() -> int:
+    """Wipe leftover files in temp_files/ (orphaned after a restart, since the
+    in-memory index that referenced them is gone). Keeps .gitkeep."""
+    removed = 0
+    for path in glob.glob(os.path.join(TEMP_DIR, "*")):
+        if path.endswith(".gitkeep"):
+            continue
+        try:
+            os.remove(path); removed += 1
+        except OSError:
+            pass
+    return removed
 
 llm_service = LLMService()
 document_service = DocumentService()
@@ -129,6 +186,13 @@ async def _save_and_extract(file: UploadFile, document_type: str) -> tuple[str, 
             f"and detailed timeline — may be incomplete or missing. "
             f"For the most complete output, upload both the award letter and the original proposal together."
         )
+
+    # Forget the raw source document immediately — its text is already
+    # extracted and stored in memory; the PII file must not linger on disk.
+    try:
+        os.remove(filepath)
+    except OSError:
+        pass
 
     return file_id, file.filename, stripped, content_warning
 
@@ -236,6 +300,7 @@ async def process_single_file(file: UploadFile, file_num: int, total_files: int,
 
     grant_data_store[file_id] = grant_data
     grant_tenant[file_id] = tenant_id
+    _touch(file_id)
     return UploadResponse(
         success=True,
         message="File uploaded and processed successfully",
@@ -373,6 +438,7 @@ async def upload_grant_package(
 
     grant_data_store[package_id] = grant_data
     grant_tenant[package_id] = user.tenant_id
+    _touch(package_id)
 
     message = "Grant package uploaded and locally processed successfully"
     if use_external_llm:
@@ -397,6 +463,7 @@ async def get_grant_data(file_id: str, user: User = Depends(get_current_user)):
     _check_access(file_id, user)
     if file_id not in grant_data_store:
         raise HTTPException(status_code=404, detail="Grant data not found")
+    _touch(file_id)
     return grant_data_store[file_id]
 
 
@@ -427,6 +494,7 @@ async def generate_documents(file_id: str, request: GenerateDocumentsRequest, us
         raise HTTPException(status_code=404, detail="Grant data not found")
 
     grant_data = grant_data_store[file_id]
+    _touch(file_id)
     options = {
         "generate_workplan": request.generate_workplan,
         "generate_budget": request.generate_budget,
@@ -502,29 +570,9 @@ async def download_document(file_id: str, doc_type: str, user: User = Depends(ge
 
 @router.delete("/{file_id}")
 async def delete_grant(file_id: str, user: User = Depends(get_current_user)):
+    """Explicit 'forget now' — erase this grant and its generated files immediately."""
     _check_access(file_id, user)
-    grant_tenant.pop(file_id, None)
-    grant_data = grant_data_store.pop(file_id, None)
-    generated_docs = generated_docs_store.pop(file_id, {})
-
-    if not grant_data:
+    if file_id not in grant_data_store:
         raise HTTPException(status_code=404, detail="Grant data not found")
-
-    for source in grant_data.source_documents or []:
-        if source.file_id and source.filename:
-            ext = os.path.splitext(source.filename)[1]
-            source_path = os.path.join("temp_files", f"{source.file_id}{ext}")
-            if os.path.exists(source_path):
-                try:
-                    os.remove(source_path)
-                except OSError:
-                    pass
-
-    for path in generated_docs.values():
-        if path and os.path.exists(path):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-
+    _forget(file_id)  # removes in-memory records + generated files on disk
     return {"success": True, "message": "Grant deleted"}
