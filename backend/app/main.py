@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     lifespan=lifespan,
-    title="Grant Automation API",
+    title="Grant Award Management API",
     description="API for automating grant management tasks for nonprofits",
     version="2.7.1"
 )
@@ -100,7 +100,7 @@ app.include_router(auth_routes.router)
 @app.get("/")
 async def root():
     return {
-        "message": "Grant Automation API",
+        "message": "Grant Award Management API",
         "version": "2.7.1",
         "docs": "/docs",
         "database": "In-Memory (No DB)"

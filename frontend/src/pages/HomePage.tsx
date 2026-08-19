@@ -49,7 +49,7 @@ export const HomePage: React.FC = () => {
         <div className="text-center mb-12">
           <div className="flex items-center justify-center gap-3 mb-4">
             <h1 className="text-4xl font-bold text-gray-900">
-              Grant Automation Platform
+              Grant Award Management
             </h1>
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-primary-100 text-primary-700 border border-primary-200 self-center">
               v{APP_VERSION}
