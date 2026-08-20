@@ -125,7 +125,7 @@ def _ocr_pdf_text(filepath: str, max_pages: int = 5) -> str:
         return ""
 
 
-async def _save_and_extract(file: UploadFile, document_type: str) -> tuple[str, str, str, Optional[str]]:
+def _save_and_extract(file: UploadFile, document_type: str) -> tuple[str, str, str, Optional[str]]:
     """Extract text from an uploaded file.
 
     Returns (file_id, filename, text, content_warning).
@@ -138,7 +138,7 @@ async def _save_and_extract(file: UploadFile, document_type: str) -> tuple[str, 
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in [".pdf", ".docx", ".doc"]:
         raise HTTPException(status_code=400, detail=f"Unsupported file type for '{file.filename}'")
-    content = await file.read()
+    content = file.file.read()
     if not content:
         raise HTTPException(status_code=400, detail=f"'{file.filename}' is empty — please check the file and try again")
     file_id = generate_file_id()
@@ -246,8 +246,8 @@ def _raise_if_llm_failed(grant_data: GrantData, requested: bool):
         )
 
 
-async def process_single_file(file: UploadFile, file_num: int, total_files: int, tenant_id: int) -> UploadResponse:
-    file_id, filename, text, content_warning = await _save_and_extract(file, "unknown")
+def process_single_file(file: UploadFile, file_num: int, total_files: int, tenant_id: int) -> UploadResponse:
+    file_id, filename, text, content_warning = _save_and_extract(file, "unknown")
     settings = PrivacySettings()
 
     # Auto-classify the document (proposal vs award letter vs combined) instead of
@@ -312,7 +312,7 @@ async def process_single_file(file: UploadFile, file_num: int, total_files: int,
 
 
 @router.post("/upload", response_model=List[UploadResponse])
-async def upload_grant_letters(files: List[UploadFile] = File(...), user: User = Depends(get_current_user)):
+def upload_grant_letters(files: List[UploadFile] = File(...), user: User = Depends(get_current_user)):
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
     if len(files) > 10:
@@ -321,7 +321,7 @@ async def upload_grant_letters(files: List[UploadFile] = File(...), user: User =
     results: List[UploadResponse] = []
     for idx, file in enumerate(files, 1):
         try:
-            results.append(await process_single_file(file, idx, len(files), user.tenant_id))
+            results.append(process_single_file(file, idx, len(files), user.tenant_id))
         except Exception as e:
             results.append(
                 UploadResponse(
@@ -336,7 +336,7 @@ async def upload_grant_letters(files: List[UploadFile] = File(...), user: User =
 
 
 @router.post("/upload-package", response_model=PackageUploadResponse)
-async def upload_grant_package(
+def upload_grant_package(
     proposal: Optional[UploadFile] = File(None),
     award_letter: Optional[UploadFile] = File(None),
     redact_names: bool = Form(True),
@@ -366,14 +366,14 @@ async def upload_grant_package(
     content_warnings: List[str] = []
 
     if proposal:
-        proposal_file_id, proposal_filename, proposal_text, w = await _save_and_extract(proposal, "proposal")
+        proposal_file_id, proposal_filename, proposal_text, w = _save_and_extract(proposal, "proposal")
         if w:
             content_warnings.append(w)
         proposal_kind = llm_service.classify_document(proposal_text) if proposal_text else "proposal"
         source_documents.append(SourceDocument(file_id=proposal_file_id, filename=proposal_filename, document_type="proposal"))
 
     if award_letter:
-        award_file_id, award_filename, award_text, w = await _save_and_extract(award_letter, "award_letter")
+        award_file_id, award_filename, award_text, w = _save_and_extract(award_letter, "award_letter")
         if w:
             content_warnings.append(w)
         award_kind = llm_service.classify_document(award_text) if award_text else "award_letter"
@@ -488,7 +488,7 @@ async def list_grants(user: User = Depends(get_current_user)):
 
 
 @router.post("/generate-documents/{file_id}")
-async def generate_documents(file_id: str, request: GenerateDocumentsRequest, user: User = Depends(get_current_user)):
+def generate_documents(file_id: str, request: GenerateDocumentsRequest, user: User = Depends(get_current_user)):
     _check_access(file_id, user)
     if file_id not in grant_data_store:
         raise HTTPException(status_code=404, detail="Grant data not found")

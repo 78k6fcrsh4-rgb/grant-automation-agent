@@ -40,6 +40,8 @@ az containerapp ingress sticky-sessions set -n ca-grants-backend -g rg-grantsops
   --affinity sticky
 ```
 
+**Concurrency within the replica:** the upload and document-generation endpoints run synchronously in FastAPI's worker threadpool, so a slow extraction (LLM call or OCR) runs in its own thread and does not block other users' requests. One instance can therefore serve many concurrent users; the ceiling is the container's CPU/RAM and OpenAI rate limits. True horizontal scale (multiple replicas) still requires the shared-store step below.
+
 For the current scale (a handful of organizations, short single-session
 workflows) a single replica is more than sufficient and keeps the model simple.
 If you later need true horizontal scale, the drop-in upgrade is a shared cache
