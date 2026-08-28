@@ -28,8 +28,9 @@ async def lifespan(app: FastAPI):
     init_db()
     # Optional: auto-create the first admin from env (idempotent).
     try:
-        from app.services.bootstrap import seed_from_env
+        from app.services.bootstrap import seed_from_env, seed_users_from_env
         seed_from_env()
+        seed_users_from_env()
     except Exception:
         pass
     # On boot, wipe any orphaned files from a previous run — the in-memory index
@@ -47,7 +48,7 @@ app = FastAPI(
     lifespan=lifespan,
     title="Grant Award Management API",
     description="API for automating grant management tasks for nonprofits",
-    version="2.7.2"
+    version="2.7.3"
 )
 
 # --------------------------------------------------
@@ -101,7 +102,7 @@ app.include_router(auth_routes.router)
 async def root():
     return {
         "message": "Grant Award Management API",
-        "version": "2.7.2",
+        "version": "2.7.3",
         "docs": "/docs",
         "database": "In-Memory (No DB)"
     }
