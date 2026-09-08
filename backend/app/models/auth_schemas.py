@@ -1,5 +1,7 @@
 from datetime import datetime
-from typing import Optional, Literal
+from typing import Literal, Optional
+from uuid import UUID
+
 from pydantic import BaseModel, EmailStr
 
 
@@ -12,12 +14,14 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = None
-    role: Literal["admin", "member"] = "member"
+    # 'user', not 'member': GProspect's spelling, chosen so the third app
+    # joins the shared core schema without a rename.
+    role: Literal["admin", "user"] = "user"
 
 
 class UserOut(BaseModel):
-    id: int
-    tenant_id: int
+    id: UUID
+    tenant_id: UUID
     email: EmailStr
     full_name: Optional[str] = None
     role: str

@@ -39,6 +39,10 @@ pytest==8.3.3
 
 # Auth (portable app-level login: JWT + bcrypt + SQLAlchemy)
 SQLAlchemy==2.0.35
+# v2.8.0: Postgres-only. The shared core schema needs citext, enums,
+# partial unique indexes and generated columns; SQLite has none of them.
+psycopg[binary]==3.2.3
+alembic==1.13.3
 bcrypt==4.2.1
 PyJWT==2.10.1
 email-validator==2.2.0

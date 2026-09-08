@@ -38,14 +38,14 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(*, user_id: int, email: str, tenant_id: int, role: str,
+def create_access_token(*, user_id, email: str, tenant_id, role: str,
                         expires_minutes: Optional[int] = None) -> str:
     ttl = expires_minutes if expires_minutes is not None else token_ttl_minutes()
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
         "email": email,
-        "tenant_id": tenant_id,
+        "tenant_id": str(tenant_id),
         "role": role,
         "iat": now,
         "exp": now + timedelta(minutes=ttl),

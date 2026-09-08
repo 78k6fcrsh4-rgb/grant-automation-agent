@@ -118,7 +118,10 @@ export interface GrantData {
   purpose?: string;
   grant_name?: string;
   document_format?: string;
-  extraction_confidence?: Record<string, ExtractionField>;
+  // The backend sends lowercase strings ('confirmed' | 'inferred' | 'missing'),
+  // not objects. Typing this as ExtractionField meant every badge read
+  // undefined and rendered as "Not found" regardless of the real value.
+  extraction_confidence?: Record<string, ExtractionConfidence>;
   data_gaps?: string[];
   // LLM-first extraction metadata
   validation_flags?: string[];
@@ -187,7 +190,7 @@ export interface GenerateDocumentsResponse {
 }
 
 // Extraction confidence for the review page
-export type ExtractionConfidence = 'CONFIRMED' | 'INFERRED' | 'MISSING';
+export type ExtractionConfidence = 'confirmed' | 'inferred' | 'missing';
 
 export interface ExtractionField {
   value?: string | null;
@@ -196,12 +199,12 @@ export interface ExtractionField {
 }
 
 export interface ExtractionConfidenceMap {
-  organization_name?: ExtractionField;
-  funder_name?: ExtractionField;
-  grant_title?: ExtractionField;
-  purpose?: ExtractionField;
-  grant_amount?: ExtractionField;
-  grant_period?: ExtractionField;
+  organization_name?: ExtractionConfidence;
+  funder_name?: ExtractionConfidence;
+  grant_title?: ExtractionConfidence;
+  purpose?: ExtractionConfidence;
+  grant_amount?: ExtractionConfidence;
+  grant_period?: ExtractionConfidence;
 }
 
 export interface GrantListItem {
@@ -212,4 +215,50 @@ export interface GrantListItem {
   grant_amount?: number;
   created_at?: string;
   processed: boolean;
+}
+
+// ---- Review, correction and filing (v2.8.0) ----
+
+/** The six scalars a reviewer can correct before the record is filed. */
+export const EDITABLE_SCALARS = [
+  'organization_name',
+  'funder_name',
+  'grant_title',
+  'purpose',
+  'grant_amount',
+  'grant_period',
+] as const;
+
+export type EditableScalar = (typeof EDITABLE_SCALARS)[number];
+
+/** A partial correction. The backend forbids unknown fields, so document
+ *  text cannot be patched onto a grant from the client. */
+export interface GrantDataPatch {
+  organization_name?: string | null;
+  funder_name?: string | null;
+  grant_title?: string | null;
+  purpose?: string | null;
+  grant_amount?: number | null;
+  grant_period?: string | null;
+  reporting_requirements?: ReportingRequirement[];
+  submission_requirements?: SubmissionRequirement[];
+  timeline?: Timeline;
+  budget?: Budget;
+  workplan?: WorkPlan;
+}
+
+export interface ConfirmResponse {
+  success: boolean;
+  mode: 'ephemeral' | 'linked';
+  filed: boolean;
+  grant_id?: string | null;
+  message: string;
+}
+
+/** What happens to a grant confirmed in this deployment. Shown to the user:
+ *  nobody should be under a data-retention contract they cannot see. */
+export interface PersistenceMode {
+  mode: 'ephemeral' | 'linked';
+  persists: boolean;
+  ttl_minutes: number;
 }

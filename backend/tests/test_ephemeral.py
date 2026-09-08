@@ -55,7 +55,9 @@ def test_clear_temp_dir_wipes_pii_keeps_gitkeep(tmp_path, monkeypatch):
     (d / ".gitkeep").write_text("")
     (d / "grantee.pdf").write_text("sensitive")
     (d / "out_budget.xlsx").write_text("x")
-    monkeypatch.setattr(gr, "TEMP_DIR", str(d))
+    # The scratch directory belongs to the working store, not the
+    # route module (v2.8.0).
+    monkeypatch.setattr(gr.repository, "temp_dir", str(d))
     gr.clear_temp_dir()
     assert (d / ".gitkeep").exists()
     assert not (d / "grantee.pdf").exists()

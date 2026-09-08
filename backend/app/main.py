@@ -25,6 +25,8 @@ async def _purge_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Connects, and (unless AUTO_MIGRATE=false) brings the database to head.
+    # Alembic owns the schema now — nothing here calls create_all.
     init_db()
     # Optional: auto-create the first admin from env (idempotent).
     try:
@@ -48,7 +50,7 @@ app = FastAPI(
     lifespan=lifespan,
     title="Grant Award Management API",
     description="API for automating grant management tasks for nonprofits",
-    version="2.7.3"
+    version="2.8.0"
 )
 
 # --------------------------------------------------
@@ -102,10 +104,16 @@ app.include_router(auth_routes.router)
 async def root():
     return {
         "message": "Grant Award Management API",
-        "version": "2.7.3",
+        "version": "2.8.0",
         "docs": "/docs",
-        "database": "In-Memory (No DB)"
+        "database": _storage_description(),
     }
+
+
+def _storage_description() -> str:
+    from app.services.grant_repository import repository
+    return ("PostgreSQL (grants filed to core)" if repository.persists
+            else "In-memory grant data (PostgreSQL for accounts only)")
 
 
 @app.get("/health")
@@ -122,9 +130,16 @@ async def health(llm_probe: bool = False):
 
     from app.routes.grant_routes import llm_service
     probe = llm_service.probe() if llm_probe else None
+    from app.services.grant_repository import repository
     return {
         "status": "healthy",
-        "storage": "in-memory",
+        "storage": _storage_description(),
+        # Which data-retention contract this deployment is running under.
+        # Reported so it can be shown to the user, not just configured.
+        "persistence": {
+            "mode": repository.mode,
+            "grants_persisted": repository.persists,
+        },
         "llm": {
             "api_key_present": len(key) > 10,
             "api_key_length": len(key),

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { grantApi } from '../services/api';
-import type { GenerateDocumentsRequest } from '../types';
+import type { GenerateDocumentsRequest, GrantDataPatch } from '../types';
 
 export const useUploadGrant = () => {
   const queryClient = useQueryClient();
@@ -58,3 +58,28 @@ export const useDeleteGrant = () => {
     },
   });
 };
+
+/** Correct a field on the working copy. The reply is the updated record, so
+ *  the query cache is set from it rather than refetched. */
+export const useEditGrantData = (fileId: string | undefined) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: GrantDataPatch) => grantApi.patchGrantData(fileId!, patch),
+    onSuccess: (data) => queryClient.setQueryData(['grant', fileId], data),
+  });
+};
+
+export const useConfirmGrant = (fileId: string | undefined) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => grantApi.confirmGrant(fileId!),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['grants'] }),
+  });
+};
+
+export const usePersistenceMode = () =>
+  useQuery({
+    queryKey: ['persistence-mode'],
+    queryFn: () => grantApi.getPersistenceMode(),
+    staleTime: Infinity,
+  });
