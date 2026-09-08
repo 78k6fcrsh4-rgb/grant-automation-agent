@@ -63,3 +63,58 @@ If other resources need the same Key Vault access, swap the system-assigned
 identity for a user-assigned one: create it, assign it to the app, grant it the
 role, and set the secret with `identityref:<identity-resource-id>` instead of
 `identityref:system`.
+
+---
+
+# Databases (v2.8.0+)
+
+## The model
+
+One PostgreSQL **database per partner organization**, all on one shared
+**server**. Isolation is the database boundary, not an application check:
+Postgres cannot join across databases without an explicit FDW, so the class of
+bug that would leak one nonprofit's donor records into another's dashboard
+fails closed rather than returning rows.
+
+Inside each database:
+
+| Schema | Owner | Contents |
+|---|---|---|
+| `core` | written by GMA, read by Perch | identity, funders, the metric dictionary, documents, grants, obligations, provenance, audit log |
+| `perch` | Perch only (Phase 3) | reporting periods and the fact tables |
+
+Two roles, deliberately asymmetric. `gma_app` has **no access to schema
+`perch`** — that revoke is the enforceable form of "no donor or client data
+ever reaches a prompt", since GMA is the service holding the OpenAI credential.
+`perch_app` may advance a deadline (`progress`, `owner_user_id`,
+`submitted_at`) but not invent one. Neither can UPDATE or DELETE the audit log.
+
+## Provisioning a new organization
+
+```bash
+export ADMIN_DATABASE_URL='postgresql://<admin>:<pw>@<server>.postgres.database.azure.com:5432/postgres?sslmode=require'
+./infra/provision-org-database.sh dupage
+```
+
+Creates `gma_dupage`, ensures the two roles exist, runs `alembic upgrade head`,
+and prints the connection strings to put in Key Vault. Idempotent — re-running
+migrates to head and changes nothing else.
+
+Requires `psql` (`brew install libpq`) and a machine the server's firewall
+allows. Add the client IP under **Networking → Firewall rules** on the Flexible
+Server if the connection times out.
+
+## Migrations
+
+Alembic owns the schema; nothing calls `create_all`. Migrations run **once per
+organization's database**, so they must stay idempotent and must never be
+hand-applied. `AUTO_MIGRATE=true` (the default) makes the backend run
+`alembic upgrade head` on boot, which is safe for a single-replica deploy.
+
+## Note for when GProspect joins
+
+The existing `gprospect` database is one database for the *app*, with an
+`org_name` column separating organizations — the opposite of the model above.
+When GProspect joins the shared spine (Phase 5), its data needs splitting into
+the per-organization databases, and its `org_name` string becomes
+`core.tenants`. Worth knowing before it accumulates more rows.
