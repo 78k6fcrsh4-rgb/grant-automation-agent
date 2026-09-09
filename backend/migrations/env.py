@@ -14,7 +14,16 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool, text
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BACKEND_DIR)
+
+# Load .env here too. The app puts DATABASE_URL into the environment via
+# app/__init__.py before it invokes Alembic, but `alembic upgrade head` run
+# by hand — which is what infra/README and the provisioning script tell you
+# to do — has no such help, and failed with "DATABASE_URL is not set".
+from dotenv import load_dotenv  # noqa: E402
+
+load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
 config = context.config
 if config.config_file_name is not None:

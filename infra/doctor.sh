@@ -85,7 +85,7 @@ echo "Alembic (hangs here mean a database lock, not a code problem)"
 [ -x "$BACKEND/.venv/bin/python3" ] || note "no .venv found; using system python3"
 cd "$BACKEND" || exit 1
 if command -v timeout >/dev/null; then TO="timeout 20"; else TO=""; fi
-if $TO "$PY_BIN" -m alembic current 2>&1 | tail -2; then
+if DATABASE_URL="$DB_URL" $TO "$PY_BIN" -m alembic current 2>&1 | tail -2; then
     ok "alembic responded"
 else
     bad "alembic did not finish in 20s — something is holding a lock"
