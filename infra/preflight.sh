@@ -24,8 +24,27 @@ esac
 echo
 
 echo "Tools"
-if command -v python3 >/dev/null; then ok "python3 ($(python3 -V 2>&1))"; else
-    bad "python3 not found"; fi
+# The Dockerfile builds on python:3.12-slim and CI runs 3.12. A newer local
+# interpreter is not "more up to date" here — the pinned dependency set has
+# no wheels for it, so pip falls back to building from source and fails.
+# That failure leaves a venv containing nothing but pip, which looks like a
+# venv that worked.
+if command -v python3 >/dev/null; then
+    pyver="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null)"
+    case "$pyver" in
+        3.11|3.12) ok "python3 ($(python3 -V 2>&1))" ;;
+        *)
+            bad "python3 is $pyver — this project needs 3.11 or 3.12"
+            note "The deploy target is python:3.12-slim; match it locally."
+            note "brew install python@3.12"
+            note "rm -rf \"$BACKEND/.venv\""
+            note "/opt/homebrew/bin/python3.12 -m venv \"$BACKEND/.venv\""
+            note "source \"$BACKEND/.venv/bin/activate\" && pip install -r \"$BACKEND/requirements.txt\""
+            ;;
+    esac
+else
+    bad "python3 not found"
+fi
 
 if command -v psql >/dev/null; then ok "psql ($(psql --version 2>&1 | head -1))"; else
     bad "psql not found"
@@ -36,7 +55,15 @@ echo
 
 echo "Backend virtualenv"
 if [ -d "$BACKEND/.venv" ]; then
-    ok ".venv exists"
+    venv_py="$(grep -E '^version' "$BACKEND/.venv/pyvenv.cfg" 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' ')"
+    installed="$(ls "$BACKEND"/.venv/lib/*/site-packages 2>/dev/null | wc -l | tr -d ' ')"
+    ok ".venv exists (built with python ${venv_py:-unknown}, ${installed} packages)"
+    # A venv holding only pip means the install failed, not that it is fresh.
+    if [ "${installed:-0}" -lt 5 ]; then
+        bad "the venv is effectively empty — pip install did not succeed"
+        note "Scroll back for the first pip error; on a too-new Python it will"
+        note "be a failed source build (pydantic-core, Pillow or numpy)."
+    fi
     if [ -n "${VIRTUAL_ENV:-}" ]; then ok "a virtualenv is active ($VIRTUAL_ENV)"; else
         bad "no virtualenv active in this shell"
         note "source \"$BACKEND/.venv/bin/activate\""
