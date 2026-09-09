@@ -69,8 +69,18 @@ python3 -c "import alembic, sqlalchemy, psycopg" 2>/dev/null || {
 # Roles are cluster-wide and shared by every organization's database, so they
 # are created once and reused. Passwords are generated here and printed once —
 # put them straight into Key Vault; this script stores nothing.
-GMA_PW="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
-PERCH_PW="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+# Generated with python3 rather than `tr </dev/urandom | head -c 32`: head
+# closes the pipe after 32 bytes, tr dies of SIGPIPE, and under
+# `set -euo pipefail` that kills the script silently, before the first
+# echo, with exit 141 and no output at all.
+gen_password() {
+    python3 -c "import secrets, string; print(''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32)))"
+}
+GMA_PW="$(gen_password)"
+PERCH_PW="$(gen_password)"
+[ ${#GMA_PW} -eq 32 ] && [ ${#PERCH_PW} -eq 32 ] || {
+    echo "error: could not generate role passwords." >&2; exit 1
+}
 
 echo "==> Ensuring roles exist on the server"
 psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -q <<SQL
