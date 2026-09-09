@@ -5,6 +5,11 @@
 #   ./infra/doctor.sh
 
 BACKEND="$(cd "$(dirname "${BASH_SOURCE[0]}")/../backend" && pwd)"
+# Use the project's interpreter explicitly: this is meant to be run from a
+# second terminal, which will not have the virtualenv activated, and the
+# system python3 has no alembic.
+PY_BIN="$BACKEND/.venv/bin/python3"
+[ -x "$PY_BIN" ] || PY_BIN="python3"
 ok()   { printf '  \033[32mok\033[0m    %s\n' "$1"; }
 bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; }
 note() { printf '        %s\n' "$1"; }
@@ -77,9 +82,10 @@ fi
 
 echo
 echo "Alembic (hangs here mean a database lock, not a code problem)"
+[ -x "$BACKEND/.venv/bin/python3" ] || note "no .venv found; using system python3"
 cd "$BACKEND" || exit 1
 if command -v timeout >/dev/null; then TO="timeout 20"; else TO=""; fi
-if $TO python3 -m alembic current 2>&1 | tail -2; then
+if $TO "$PY_BIN" -m alembic current 2>&1 | tail -2; then
     ok "alembic responded"
 else
     bad "alembic did not finish in 20s — something is holding a lock"
