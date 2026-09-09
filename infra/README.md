@@ -91,10 +91,48 @@ ever reaches a prompt", since GMA is the service holding the OpenAI credential.
 
 ## Provisioning a new organization
 
+The script always runs on your own machine. What changes between local and
+Azure is only `ADMIN_DATABASE_URL` — which database server it talks to. Prove
+it locally first; nothing about the schema, the roles or the migration differs.
+
+### Local first (recommended for a first run)
+
 ```bash
-export ADMIN_DATABASE_URL='postgresql://<admin>:<pw>@<server>.postgres.database.azure.com:5432/postgres?sslmode=require'
+brew install postgresql@16
+echo 'export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"' >> ~/.zshrc
+exec zsh
+brew services start postgresql@16
+
+export ADMIN_DATABASE_URL="postgresql://$USER@localhost:5432/postgres"
+./infra/preflight.sh
 ./infra/provision-org-database.sh dupage
 ```
+
+Homebrew's Postgres creates a superuser named after your macOS account with
+trust auth on localhost, so no password is needed. `postgresql@16` also
+supplies the `psql` client you will need for Azure later — installing it
+means you do not need `libpq` separately.
+
+To point the apps at it:
+
+```
+DATABASE_URL=postgresql+psycopg://gma_app@localhost:5432/gma_dupage      # GMA
+PERCH_DATABASE_URL=postgresql+psycopg://perch_app@localhost:5432/gma_dupage
+```
+
+### Then Azure, when you are ready to deploy
+
+```bash
+export ADMIN_DATABASE_URL='postgresql://<admin>:<pw>@<server>.postgres.database.azure.com:5432/postgres?sslmode=require'
+./infra/preflight.sh
+./infra/provision-org-database.sh dupage
+```
+
+Azure Database for PostgreSQL Flexible Server **drops** packets from unlisted
+addresses rather than refusing them, so an unreachable server hangs instead of
+erroring. Add your machine's IP under the server -> Networking -> Firewall
+rules (`curl -s https://ifconfig.me` gives it; a home ISP will change it every
+few weeks, and the symptom is preflight's 8-second TCP timeout coming back).
 
 Creates `gma_dupage`, ensures the two roles exist, runs `alembic upgrade head`,
 and prints the connection strings to put in Key Vault. Idempotent — re-running
