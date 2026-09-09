@@ -53,25 +53,45 @@ def get_db():
 
 
 def init_db() -> None:
-    """Verify connectivity and that migrations have been applied.
+    """Verify connectivity and that the database has been migrated.
 
-    With AUTO_MIGRATE=true (the default) this runs `alembic upgrade head`
-    itself, so a single-replica deploy is self-migrating. Set it to false
-    where migrations are run as a separate step in the pipeline.
+    Migrating is deliberately NOT the app's job. The app connects as
+    `gma_app`, which owns nothing and cannot CREATE SCHEMA — that is the
+    point of the role split, and an application that can rewrite its own
+    schema at boot is exactly what it is meant to prevent. Migrations run
+    once per organization's database, with admin credentials, via
+    infra/provision-org-database.sh.
+
+    AUTO_MIGRATE=true is available for a throwaway local database where
+    the app happens to connect as an owner. It is off by default, and it
+    will fail loudly rather than usefully if the role cannot create the
+    schema.
     """
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
 
-    if os.getenv("AUTO_MIGRATE", "true").lower() in ("1", "true", "yes"):
+    if os.getenv("AUTO_MIGRATE", "false").lower() in ("1", "true", "yes"):
         _run_migrations()
         return
 
     if not _is_migrated():
         raise RuntimeError(
-            "Database is not migrated: core.users is missing. Run "
-            "`alembic upgrade head` from the backend directory, or set "
-            "AUTO_MIGRATE=true."
+            "Database is not migrated: core.users does not exist in "
+            f"{_safe_target()}.\n"
+            "Migrations are an admin operation — the app role cannot run "
+            "them. From the repo root:\n"
+            "    ./infra/provision-org-database.sh <org-slug>\n"
+            "or, with admin credentials:\n"
+            "    DATABASE_URL=<admin url> python -m alembic upgrade head"
         )
+
+
+def _safe_target() -> str:
+    """host/database, never the credentials."""
+    from sqlalchemy.engine import make_url
+
+    u = make_url(DATABASE_URL)
+    return f"{u.host or 'local socket'}/{u.database}"
 
 
 def _is_migrated() -> bool:

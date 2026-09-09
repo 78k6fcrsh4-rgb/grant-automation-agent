@@ -146,8 +146,17 @@ Server if the connection times out.
 
 Alembic owns the schema; nothing calls `create_all`. Migrations run **once per
 organization's database**, so they must stay idempotent and must never be
-hand-applied. `AUTO_MIGRATE=true` (the default) makes the backend run
-`alembic upgrade head` on boot, which is safe for a single-replica deploy.
+hand-applied.
+
+**Migrating is an admin operation, not the app's job.** The app connects as
+`gma_app`, which owns nothing and cannot `CREATE SCHEMA` — that is the point of
+the role split, and an application able to rewrite its own schema at boot is
+exactly what it exists to prevent. `provision-org-database.sh` migrates with
+admin credentials; the app only verifies at startup that the database is at
+head, and says what to run if it is not.
+
+`AUTO_MIGRATE` therefore defaults to **false**. Set it true only for a
+throwaway local database where the app happens to connect as an owner.
 
 ## Note for when GProspect joins
 
