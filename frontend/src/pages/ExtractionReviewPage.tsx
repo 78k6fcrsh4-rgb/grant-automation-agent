@@ -471,9 +471,15 @@ export const ExtractionReviewPage: React.FC = () => {
             </Button>
           )}
           {confirm.isError && (
-            <p className="text-sm text-red-600 mt-2">
-              Could not confirm this grant. Your corrections are still held in this session.
-            </p>
+            <div className="text-sm text-red-600 mt-2">
+              <p>Could not confirm this grant. Your corrections are still held in this session.</p>
+              {/* Show what the server actually said — a generic message with the
+                  real reason hidden is not something anyone can act on. */}
+              <p className="mt-1 font-mono text-xs break-words">
+                {(confirm.error as { response?: { data?: { detail?: string } } })
+                  ?.response?.data?.detail ?? String(confirm.error)}
+              </p>
+            </div>
           )}
         </div>
 

@@ -20,10 +20,13 @@ from app.services.local_extraction_service import LocalExtractionService
 from app.services import grant_repository as _repository
 from app.utils.file_helpers import save_uploaded_file, extract_text_from_file, extract_text_from_pdf, generate_file_id
 from typing import Dict, List, Optional
+import logging
 import io
 import os
 import time
 import glob
+
+log = logging.getLogger("gma.grants")
 
 router = APIRouter(prefix="/api/grants", tags=["grants"])
 
@@ -593,11 +596,17 @@ def confirm_grant(file_id: str, user: User = Depends(get_current_user),
     try:
         grant_id = repository.confirm(
             file_id, tenant_id=user.tenant_id, user_id=user.id, db=db)
-    except Exception as exc:  # noqa: BLE001 — surfaced, not swallowed
+    except Exception as exc:  # noqa: BLE001
         db.rollback()
+        # Log the whole traceback server-side. The HTTP response stays terse —
+        # it may reach a browser — but the operator running the service needs
+        # to see what actually failed, and hiding it from them too was simply
+        # a mistake.
+        log.exception("Filing grant %s failed", file_id)
         raise HTTPException(
             status_code=500,
-            detail=f"Could not file this grant: {type(exc).__name__}") from exc
+            detail=f"Could not file this grant: {type(exc).__name__}: {exc}"
+        ) from exc
 
     _touch(file_id)
     if grant_id is None:
