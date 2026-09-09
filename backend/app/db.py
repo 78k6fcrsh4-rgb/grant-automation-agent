@@ -28,7 +28,14 @@ if DATABASE_URL.startswith("sqlite"):
         "PostgreSQL. Set DATABASE_URL to a postgresql+psycopg:// connection string."
     )
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, future=True)
+# connect_timeout so an unreachable or wedged server fails in 10s with a
+# real error instead of hanging the startup indefinitely with no output.
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    future=True,
+    connect_args={"connect_timeout": 10},
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
 
 # Every model on this Base lives in the `core` schema, so the ORM and the
