@@ -5,9 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes import grant_routes, auth_routes
 from app.db import init_db
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+# .env is loaded in app/__init__.py — it has to happen before any module
+# that reads its configuration at import time, which is every one of them.
 
 PURGE_INTERVAL_SECONDS = int(os.getenv("PURGE_INTERVAL_SECONDS", "300"))
 
