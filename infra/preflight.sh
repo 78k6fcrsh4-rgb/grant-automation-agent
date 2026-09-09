@@ -114,11 +114,23 @@ PY
         ok "TCP $port reachable"
     else
         bad "cannot open TCP $port within 8s"
-        note "Almost always the Azure firewall: the server drops packets from"
-        note "unknown addresses, so psql hangs instead of refusing."
-        note "Add this machine's IP under the Flexible Server ->"
-        note "Networking -> Firewall rules. Your current IP:"
-        note "  curl -s https://ifconfig.me"
+        case "$hostname" in
+            localhost|127.0.0.1|::1)
+                note "Nothing is listening on $port locally — the server is not running."
+                note "  brew services list | grep postgres      # what Homebrew thinks"
+                note "  brew services start postgresql@16       # start it"
+                note "  pg_isready -h localhost -p $port        # confirm"
+                note "If it starts and immediately stops, the log says why:"
+                note "  tail -30 /opt/homebrew/var/log/postgresql@16.log"
+                ;;
+            *)
+                note "Usually the Azure firewall: the server drops packets from"
+                note "unlisted addresses, so psql hangs instead of refusing."
+                note "Add this machine's IP under the Flexible Server ->"
+                note "Networking -> Firewall rules. Your current IP:"
+                note "  curl -s https://ifconfig.me"
+                ;;
+        esac
     fi
 
     if command -v psql >/dev/null; then
@@ -133,7 +145,18 @@ PY
             esac
         else
             bad "psql could not connect or authenticate within 8s"
-            note "Check the password, and that the URL ends in /postgres"
+            case "$hostname" in
+                localhost|127.0.0.1|::1)
+                    note "If the TCP check above also failed, this is the same"
+                    note "problem — start the server and re-run. If TCP passed,"
+                    note "the role or database in the URL does not exist:"
+                    note "  psql -l                     # what exists"
+                    note "  createuser -s \"$USER\"      # if your role is missing"
+                    ;;
+                *)
+                    note "Check the password, and that the URL ends in /postgres"
+                    ;;
+            esac
         fi
     fi
 fi
