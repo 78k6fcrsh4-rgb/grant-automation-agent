@@ -1,18 +1,23 @@
-"""Env-based admin auto-seed. Offline."""
+"""Env-based admin auto-seed. No API key needed; needs TEST_DATABASE_URL."""
 import os
-import tempfile
 
-_DB_FD, _DB_PATH = tempfile.mkstemp(suffix=".db")
-os.environ["DATABASE_URL"] = f"sqlite:///{_DB_PATH}"
+from tests.conftest import TEST_DATABASE_URL, migrate_test_database, needs_db
+
+if TEST_DATABASE_URL:
+    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["SECRET_KEY"] = "test-secret-bootstrap"
+os.environ["AUTO_MIGRATE"] = "false"
 
-from app.db import init_db, SessionLocal
-from app.models.db_models import User, Tenant
-from app.services import bootstrap, auth_service
+from app.db import SessionLocal  # noqa: E402
+from app.models.core_models import User, Tenant  # noqa: E402
+from app.services import bootstrap, auth_service  # noqa: E402
+
+pytestmark = needs_db
 
 
 def setup_module(_):
-    init_db()
+    if TEST_DATABASE_URL:
+        migrate_test_database(TEST_DATABASE_URL)
 
 
 def test_seed_from_env_creates_then_is_idempotent(monkeypatch):
@@ -42,6 +47,11 @@ def test_seed_from_env_noop_without_vars(monkeypatch):
 
 
 def test_seed_users_from_env_creates_named_pilot_user(monkeypatch):
+    """The legacy 'member' spelling is still accepted and normalised to 'user'.
+
+    A SEED_USERS value is environment config that may already be deployed,
+    so v2.8.0 must not break a pilot login on a word change.
+    """
     import json as _json
     monkeypatch.setenv("SEED_TENANT_SLUG", "dupage")
     monkeypatch.setenv("SEED_TENANT_NAME", "DuPage Health Coalition")
@@ -57,7 +67,7 @@ def test_seed_users_from_env_creates_named_pilot_user(monkeypatch):
     db = SessionLocal()
     try:
         u = db.query(User).filter(User.email == "pilot@dupagehealth.org").first()
-        assert u is not None and u.role == "member" and u.full_name == "Pilot Tester"
+        assert u is not None and u.role == "user" and u.full_name == "Pilot Tester"
         assert auth_service.verify_password("Pilot-Pass-2026", u.hashed_password)
     finally:
         db.close()

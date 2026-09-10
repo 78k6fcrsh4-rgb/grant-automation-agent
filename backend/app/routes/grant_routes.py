@@ -1,7 +1,10 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Depends
 from fastapi.responses import FileResponse
 from app.deps import get_current_user
-from app.models.db_models import User
+from app.db import get_db
+from sqlalchemy.orm import Session
+from app.models.core_models import User
+from app.models.edit_schemas import ConfirmResponse, EDITABLE_SCALARS, GrantDataPatch
 from app.models.schemas import (
     UploadResponse,
     GenerateDocumentsRequest,
@@ -14,74 +17,35 @@ from app.services.llm_service import LLMService
 from app.services.document_service import DocumentService
 from app.services.privacy_service import PrivacyService
 from app.services.local_extraction_service import LocalExtractionService
+from app.services import grant_repository as _repository
 from app.utils.file_helpers import save_uploaded_file, extract_text_from_file, extract_text_from_pdf, generate_file_id
 from typing import Dict, List, Optional
+import logging
 import io
 import os
 import time
 import glob
 
+log = logging.getLogger("gma.grants")
+
 router = APIRouter(prefix="/api/grants", tags=["grants"])
 
-grant_data_store: Dict[str, GrantData] = {}
-generated_docs_store: Dict[str, Dict[str, str]] = {}
-# Maps grant/package id -> owning tenant_id, so each org sees only its own grants.
-grant_tenant: Dict[str, int] = {}
-# --- Ephemeral / "forget-by-design" state ---
-# Grant data lives only in memory and is purged after a short idle window. It is
-# never written to a durable database — the app is a tool to manage a grant when
-# it is awarded, not a system of record.
-grant_created_at: Dict[str, float] = {}
-GRANT_TTL_SECONDS = int(os.getenv("GRANT_TTL_MINUTES", "120")) * 60
-TEMP_DIR = "temp_files"
+# The working store. Ephemeral in both modes; in linked mode a confirmed
+# record is additionally filed to core.grants. See services/grant_repository.
+repository = _repository.repository
 
+# Module-level aliases kept so existing callers and tests keep working.
+grant_data_store = repository.data
+generated_docs_store = repository.generated_docs
+grant_tenant = repository.tenant
+grant_created_at = repository.created_at
+GRANT_TTL_SECONDS = _repository.GRANT_TTL_SECONDS
 
-def _touch(file_id: str) -> None:
-    """(Re)start the idle clock for a grant — called on create and on each access
-    so an active session is never purged mid-use (sliding expiration)."""
-    grant_created_at[file_id] = time.time()
-
-
-def _delete_generated_files(file_id: str) -> None:
-    for path in (generated_docs_store.get(file_id) or {}).values():
-        try:
-            if path and os.path.exists(path):
-                os.remove(path)
-        except OSError:
-            pass
-
-
-def _forget(file_id: str) -> None:
-    """Erase every trace of one grant: in-memory records + generated files."""
-    _delete_generated_files(file_id)
-    grant_data_store.pop(file_id, None)
-    generated_docs_store.pop(file_id, None)
-    grant_tenant.pop(file_id, None)
-    grant_created_at.pop(file_id, None)
-
-
-def purge_expired() -> int:
-    """Forget grants idle longer than GRANT_TTL_SECONDS. Returns count purged."""
-    now = time.time()
-    expired = [fid for fid, ts in list(grant_created_at.items())
-               if now - ts > GRANT_TTL_SECONDS]
-    for fid in expired:
-        _forget(fid)
-    return len(expired)
-
-
-def clear_temp_dir() -> int:
-    """Wipe leftover files in temp_files/ (orphaned after a restart, since the
-    in-memory index that referenced them is gone). Keeps .gitkeep."""
-    removed = 0
-    for path in glob.glob(os.path.join(TEMP_DIR, "*")):
-        if path.endswith(".gitkeep"):
-            continue
-        try:
-            os.remove(path); removed += 1
-        except OSError:
-            pass
-    return removed
+_touch = repository.touch
+_delete_generated_files = repository.delete_generated_files
+_forget = repository.forget
+purge_expired = repository.purge_expired
+clear_temp_dir = repository.clear_temp_dir
 
 llm_service = LLMService()
 document_service = DocumentService()
@@ -246,7 +210,7 @@ def _raise_if_llm_failed(grant_data: GrantData, requested: bool):
         )
 
 
-def process_single_file(file: UploadFile, file_num: int, total_files: int, tenant_id: int) -> UploadResponse:
+def process_single_file(file: UploadFile, file_num: int, total_files: int, tenant_id) -> UploadResponse:
     file_id, filename, text, content_warning = _save_and_extract(file, "unknown")
     settings = PrivacySettings()
 
@@ -298,9 +262,7 @@ def process_single_file(file: UploadFile, file_num: int, total_files: int, tenan
             grant_data, award_text=redacted_award_text, sanitized_text=redacted_text,
         )
 
-    grant_data_store[file_id] = grant_data
-    grant_tenant[file_id] = tenant_id
-    _touch(file_id)
+    repository.put(file_id, grant_data, tenant_id)
     return UploadResponse(
         success=True,
         message="File uploaded and processed successfully",
@@ -436,9 +398,7 @@ def upload_grant_package(
             grant_data, award_text=redacted_award_text, sanitized_text=redacted_text,
         )
 
-    grant_data_store[package_id] = grant_data
-    grant_tenant[package_id] = user.tenant_id
-    _touch(package_id)
+    repository.put(package_id, grant_data, user.tenant_id)
 
     message = "Grant package uploaded and locally processed successfully"
     if use_external_llm:
@@ -576,3 +536,99 @@ async def delete_grant(file_id: str, user: User = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Grant data not found")
     _forget(file_id)  # removes in-memory records + generated files on disk
     return {"success": True, "message": "Grant deleted"}
+
+
+@router.patch("/data/{file_id}", response_model=GrantData)
+def edit_grant_data(file_id: str, patch: GrantDataPatch,
+                    user: User = Depends(get_current_user)):
+    """Correct the extraction before it becomes the record.
+
+    Extraction is a proposal, not a fact: the model flags fields as
+    `inferred`, and the validators flag figures that appear only in a
+    threshold clause. Without this endpoint a reviewer can see both and
+    do nothing about either.
+
+    Scalar corrections are tracked per field so that, on confirm, the
+    extractor's original claim is preserved next to the human's in
+    core.grant_field_provenance rather than being overwritten by it.
+    """
+    if file_id not in grant_data_store:
+        raise HTTPException(status_code=404, detail="Grant data not found")
+    _check_access(file_id, user)
+
+    grant_data = grant_data_store[file_id]
+    changes = patch.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="No fields supplied")
+
+    for field, value in changes.items():
+        if field in EDITABLE_SCALARS:
+            if getattr(grant_data, field, None) == value:
+                continue
+            setattr(grant_data, field, value)
+            repository.record_edit(file_id, field, user.id)
+            # A field a human has looked at and set is confirmed by
+            # definition; leaving it 'inferred' would misreport the record.
+            if grant_data.extraction_confidence is not None:
+                grant_data.extraction_confidence[field] = "confirmed"
+        else:
+            setattr(grant_data, field, getattr(patch, field))
+            repository.record_edit(file_id, field, user.id)
+
+    _touch(file_id)
+    return grant_data
+
+
+@router.post("/confirm/{file_id}", response_model=ConfirmResponse)
+def confirm_grant(file_id: str, user: User = Depends(get_current_user),
+                  db: Session = Depends(get_db)):
+    """Accept the record as reviewed.
+
+    In ephemeral mode this is a session fact and nothing leaves memory.
+    In linked mode the whitelisted record is filed to core.grants, where
+    Perch reads it. Either way the confirmation is explicit and attributed
+    — machine output never becomes the system of record unattended.
+    """
+    if file_id not in grant_data_store:
+        raise HTTPException(status_code=404, detail="Grant data not found")
+    _check_access(file_id, user)
+
+    try:
+        grant_id = repository.confirm(
+            file_id, tenant_id=user.tenant_id, user_id=user.id, db=db)
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        # Log the whole traceback server-side. The HTTP response stays terse —
+        # it may reach a browser — but the operator running the service needs
+        # to see what actually failed, and hiding it from them too was simply
+        # a mistake.
+        log.exception("Filing grant %s failed", file_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not file this grant: {type(exc).__name__}: {exc}"
+        ) from exc
+
+    _touch(file_id)
+    if grant_id is None:
+        return ConfirmResponse(
+            success=True, mode=repository.mode, filed=False,
+            message="Reviewed. This session is not retained — the record is "
+                    "held in memory only and is purged when it expires.")
+    return ConfirmResponse(
+        success=True, mode=repository.mode, filed=True, grant_id=str(grant_id),
+        message="Filed. This grant is now the organization's record and is "
+                "visible to Perch.")
+
+
+@router.get("/persistence-mode")
+def persistence_mode(user: User = Depends(get_current_user)):
+    """What happens to a grant confirmed in this deployment.
+
+    The frontend shows this on the review page. A user should never be
+    under a data-retention contract they cannot see.
+    """
+    return {
+        "mode": repository.mode,
+        "persists": repository.persists,
+        "ttl_minutes": GRANT_TTL_SECONDS // 60,
+    }

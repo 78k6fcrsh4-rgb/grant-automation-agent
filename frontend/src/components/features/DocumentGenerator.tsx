@@ -71,10 +71,9 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({ fileId }) 
   const handleDownload = async (type: string, filename: string) => {
     try {
       setDownloadingDoc(type);
-      const url = grantApi.downloadDocument(fileId, type);
-      const response = await fetch(url, { method: 'GET', headers: { Accept: 'application/octet-stream' } });
-      if (!response.ok) throw new Error(response.statusText);
-      const blob = await response.blob();
+      // Goes through the axios instance, which attaches the bearer token.
+      // The raw fetch() this replaces sent none, so downloads 401'd.
+      const blob = await grantApi.downloadDocument(fileId, type);
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;

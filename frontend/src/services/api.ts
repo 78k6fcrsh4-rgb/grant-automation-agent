@@ -1,5 +1,8 @@
 import axios from 'axios';
 import type {
+  ConfirmResponse,
+  GrantDataPatch,
+  PersistenceMode,
   UploadResponse,
   PackageUploadResponse,
   GrantData,
@@ -8,7 +11,13 @@ import type {
   GrantListItem,
 } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://ca-grants-backend.ambitioustree-e69e3f81.centralus.azurecontainerapps.io';
+// The Dockerfile and the deploy workflow both pass VITE_API_BASE_URL, so a
+// deployed bundle that only read VITE_API_URL always silently fell back to
+// the hardcoded Azure host. Accept either.
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  'https://ca-grants-backend.ambitioustree-e69e3f81.centralus.azurecontainerapps.io';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -110,7 +119,35 @@ export const grantApi = {
     return response.data;
   },
 
-  downloadDocument: (fileId: string, docType: string): string => `${API_URL}/api/grants/download/${fileId}/${docType}`,
+  /** Correct the extraction before it becomes the record. */
+  patchGrantData: async (fileId: string, patch: GrantDataPatch): Promise<GrantData> => {
+    const response = await api.patch<GrantData>(`/api/grants/data/${fileId}`, patch);
+    return response.data;
+  },
+
+  /** Accept the record as reviewed. Files it to core in linked mode. */
+  confirmGrant: async (fileId: string): Promise<ConfirmResponse> => {
+    const response = await api.post<ConfirmResponse>(`/api/grants/confirm/${fileId}`);
+    return response.data;
+  },
+
+  getPersistenceMode: async (): Promise<PersistenceMode> => {
+    const response = await api.get<PersistenceMode>('/api/grants/persistence-mode');
+    return response.data;
+  },
+
+  /** Downloads go through the axios instance so the bearer token is attached.
+   *  The previous raw fetch() sent no Authorization header at all, so every
+   *  download 401'd against an endpoint that requires one. */
+  downloadDocument: async (fileId: string, docType: string): Promise<Blob> => {
+    const response = await api.get(`/api/grants/download/${fileId}/${docType}`, {
+      responseType: 'blob',
+    });
+    return response.data as Blob;
+  },
+
+  downloadUrl: (fileId: string, docType: string): string =>
+    `${API_URL}/api/grants/download/${fileId}/${docType}`,
 };
 
 export default api;
@@ -118,8 +155,10 @@ export default api;
 
 // ---- Authentication API ----
 export interface AuthUser {
-  id: number;
-  tenant_id: number;
+  // UUIDs from v2.8.0: integer ids would collide when the per-organization
+  // databases are ever consolidated.
+  id: string;
+  tenant_id: string;
   email: string;
   full_name?: string | null;
   role: string;

@@ -1,10 +1,12 @@
 """Shared FastAPI dependencies for authentication/authorization."""
+import uuid
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models.db_models import User
+from app.models.core_models import User
 from app.services import auth_service
 
 _bearer = HTTPBearer(auto_error=False)
@@ -21,7 +23,13 @@ def get_current_user(
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
-    user = db.query(User).filter(User.id == int(payload.get("sub", 0))).first()
+    try:
+        user_id = uuid.UUID(str(payload.get("sub", "")))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Invalid or expired token",
+                            headers={"WWW-Authenticate": "Bearer"})
+    user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
     return user

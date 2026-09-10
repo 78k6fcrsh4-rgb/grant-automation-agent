@@ -1,25 +1,33 @@
-"""Auth tests — all offline, no API key. Uses a throwaway SQLite DB."""
-import os
-import tempfile
+"""Auth tests — no API key needed, but a throwaway PostgreSQL database is.
 
-# Configure a temp DB + deterministic secret BEFORE importing the app.
-_DB_FD, _DB_PATH = tempfile.mkstemp(suffix=".db")
-os.environ["DATABASE_URL"] = f"sqlite:///{_DB_PATH}"
-os.environ["SECRET_KEY"] = "test-secret-key"
-os.environ["LLM_REQUIRED"] = "false"
+From v2.8.0 identity lives in the shared `core` schema, which needs real
+Postgres. Set TEST_DATABASE_URL to run these; without it they skip.
+"""
+import os
 
 import pytest
-from fastapi.testclient import TestClient
 
-from app.main import app
-from app.db import SessionLocal, init_db
-from app.models.db_models import Tenant, User
-from app.services import auth_service
+from tests.conftest import TEST_DATABASE_URL, migrate_test_database, needs_db
+
+if TEST_DATABASE_URL:
+    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+os.environ["SECRET_KEY"] = "test-secret-key"
+os.environ["LLM_REQUIRED"] = "false"
+os.environ["AUTO_MIGRATE"] = "false"
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app.main import app  # noqa: E402
+from app.db import SessionLocal  # noqa: E402
+from app.models.core_models import Tenant, User  # noqa: E402
+from app.services import auth_service  # noqa: E402
+
+pytestmark = needs_db
 
 
 @pytest.fixture(scope="module", autouse=True)
 def seed():
-    init_db()
+    migrate_test_database(TEST_DATABASE_URL)
     db = SessionLocal()
     try:
         t1 = Tenant(name="DuPage Health Coalition", slug="dupage")
@@ -29,7 +37,7 @@ def seed():
             User(tenant_id=t1.id, email="admin@dupage.org", full_name="Admin",
                  hashed_password=auth_service.hash_password("dupagepass"), role="admin"),
             User(tenant_id=t1.id, email="member@dupage.org",
-                 hashed_password=auth_service.hash_password("memberpass"), role="member"),
+                 hashed_password=auth_service.hash_password("memberpass"), role="user"),
             User(tenant_id=t2.id, email="admin@other.org",
                  hashed_password=auth_service.hash_password("otherpass"), role="admin"),
         ])
@@ -61,9 +69,12 @@ def test_password_hash_roundtrip():
 
 
 def test_jwt_roundtrip():
-    tok = auth_service.create_access_token(user_id=1, email="a@b.c", tenant_id=9, role="admin")
+    import uuid
+    uid, tid = uuid.uuid4(), uuid.uuid4()
+    tok = auth_service.create_access_token(user_id=uid, email="a@b.c", tenant_id=tid, role="admin")
     payload = auth_service.decode_token(tok)
-    assert payload["sub"] == "1" and payload["tenant_id"] == 9 and payload["role"] == "admin"
+    assert payload["sub"] == str(uid) and payload["tenant_id"] == str(tid)
+    assert payload["role"] == "admin"
     assert auth_service.decode_token("garbage") is None
 
 
@@ -94,7 +105,7 @@ def test_admin_can_create_user_member_cannot(client):
     admin = _token(client, "admin@dupage.org", "dupagepass")
     r = client.post("/api/auth/users",
                     headers={"Authorization": f"Bearer {admin}"},
-                    json={"email": "new@dupage.org", "password": "newpass123", "role": "member"})
+                    json={"email": "new@dupage.org", "password": "newpass123", "role": "user"})
     assert r.status_code == 201 and r.json()["email"] == "new@dupage.org"
 
     member = _token(client, "member@dupage.org", "memberpass")
