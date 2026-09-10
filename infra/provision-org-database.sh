@@ -76,11 +76,27 @@ python3 -c "import alembic, sqlalchemy, psycopg" 2>/dev/null || {
 gen_password() {
     python3 -c "import secrets, string; print(''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32)))"
 }
+GMA_ROLE_CREATED="no"
 GMA_PW="$(gen_password)"
 PERCH_PW="$(gen_password)"
 [ ${#GMA_PW} -eq 32 ] && [ ${#PERCH_PW} -eq 32 ] || {
     echo "error: could not generate role passwords." >&2; exit 1
 }
+
+echo "==> Checking the admin connection"
+if ! ADMIN_WHO="$(psql "$ADMIN_URL" -tAc "SELECT current_user || '@' || current_database()" 2>&1)"; then
+    echo "error: cannot connect with ADMIN_DATABASE_URL." >&2
+    echo "       psql said: ${ADMIN_WHO}" >&2
+    echo "       - Azure needs ?sslmode=require on the URL." >&2
+    echo "       - A password containing @ : / ? # or % must be percent-encoded." >&2
+    echo "         python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=\"\"))' '<password>'" >&2
+    echo "       - The server firewall must allow this machine's IP." >&2
+    exit 1
+fi
+echo "    connected as ${ADMIN_WHO}"
+
+PRE_EXISTING="$(psql "$ADMIN_URL" -tAc "SELECT 1 FROM pg_roles WHERE rolname='gma_app'")"
+[[ "$PRE_EXISTING" == "1" ]] || GMA_ROLE_CREATED="yes"
 
 echo "==> Ensuring roles exist on the server"
 psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -q <<SQL
@@ -103,7 +119,12 @@ END
 SQL
 
 echo "==> Ensuring database ${DB} exists"
-if psql "$ADMIN_URL" -tAc "SELECT 1 FROM pg_database WHERE datname='${DB}'" | grep -q 1; then
+# No pipe here on purpose: `psql | grep -q` lets grep close the pipe on its
+# first match, psql dies of SIGPIPE (141), and pipefail reports 141 for the
+# whole pipeline — so an existing database reads as missing and the CREATE
+# below fails the script under ON_ERROR_STOP. Capture, then compare.
+DB_EXISTS="$(psql "$ADMIN_URL" -tAc "SELECT 1 FROM pg_database WHERE datname='${DB}'")"
+if [[ "$DB_EXISTS" == "1" ]]; then
     echo "    ${DB} already exists"
 else
     psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE ${DB}"
@@ -123,6 +144,53 @@ PY
 echo "==> Migrating ${DB} to head"
 cd "$BACKEND_DIR"
 DATABASE_URL="${ORG_URL/postgresql:\/\//postgresql+psycopg://}" python3 -m alembic upgrade head
+
+# Privileges are checked from the admin session, which needs no role password
+# and so runs on every invocation — including re-runs against a server whose
+# roles already exist. Two production failures yesterday were privilege gaps
+# that could not surface because every test ran as the superuser.
+echo "==> Verifying least-privilege grants in ${DB}"
+psql "$ORG_URL" -v ON_ERROR_STOP=1 -tA <<'SQL'
+SELECT CASE WHEN has_table_privilege('gma_app', 'core.grants', 'INSERT')
+             AND has_table_privilege('gma_app', 'core.grants', 'SELECT')
+            THEN '    ok       gma_app can read and write core.grants'
+            ELSE '    MISSING  gma_app cannot read/write core.grants' END;
+-- INSERT ... RETURNING reads the columns it returns, so an append-only log
+-- still needs SELECT. This exact grant was missing and broke filing.
+SELECT CASE WHEN has_table_privilege('gma_app', 'core.audit_log', 'INSERT')
+             AND has_table_privilege('gma_app', 'core.audit_log', 'SELECT')
+            THEN '    ok       gma_app can append to core.audit_log (INSERT ... RETURNING)'
+            ELSE '    MISSING  gma_app needs INSERT *and* SELECT on core.audit_log' END;
+SELECT CASE WHEN has_table_privilege('gma_app', 'core.audit_log', 'UPDATE')
+              OR has_table_privilege('gma_app', 'core.audit_log', 'DELETE')
+            THEN '    PROBLEM  core.audit_log is not append-only for gma_app'
+            ELSE '    ok       core.audit_log is append-only (no UPDATE/DELETE)' END;
+SELECT CASE WHEN has_table_privilege('perch_app', 'core.obligations', 'SELECT')
+            THEN '    ok       perch_app can read core.obligations'
+            ELSE '    MISSING  perch_app cannot read core.obligations' END;
+SELECT CASE WHEN has_table_privilege('perch_app', 'core.grants', 'INSERT')
+            THEN '    PROBLEM  perch_app can write core.grants — it should be read-only there'
+            ELSE '    ok       perch_app cannot write core.grants' END;
+SQL
+
+if [[ "$GMA_ROLE_CREATED" == "yes" ]]; then
+    echo "==> Verifying gma_app can actually log in"
+    GMA_TEST_URL="$(python3 - "$ORG_URL" "$GMA_PW" <<'PY'
+import sys, urllib.parse
+from urllib.parse import urlsplit, urlunsplit
+p = urlsplit(sys.argv[1])
+host = p.netloc.split("@")[-1]
+pw = urllib.parse.quote(sys.argv[2], safe="")
+print(urlunsplit(("postgresql", f"gma_app:{pw}@{host}", p.path, p.query, "")))
+PY
+)"
+    if psql "$GMA_TEST_URL" -v ON_ERROR_STOP=1 -tAc "SELECT 1" >/dev/null 2>&1; then
+        echo "    ok       gma_app logs in to ${DB}"
+    else
+        echo "    FAILED   gma_app cannot log in — the app will not start" >&2
+        exit 1
+    fi
+fi
 
 echo
 echo "==> Done. Connection strings for ${SLUG} (store in Key Vault, not in a file):"
