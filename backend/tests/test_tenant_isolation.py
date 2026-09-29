@@ -126,6 +126,67 @@ def test_no_exempt_table_carries_a_tenant_id(db):
     )
 
 
+# Views that deliberately run with their owner's privileges, and therefore
+# bypass every policy. There should be almost none, and each needs a reason
+# that survives being read aloud.
+OWNER_SCOPED_VIEWS = {
+    "core.tenant_directory":
+        "The login directory. A session cannot be scoped to an organization "
+        "until we know which one the person belongs to, and an unscoped "
+        "lookup of core.users returns nothing under RLS. Two columns wide — "
+        "slug and id — so it discloses only that an organization exists and "
+        "what it is called, which the person just typed into the form.",
+}
+
+
+def test_every_view_runs_as_the_invoker(db):
+    """A view without security_invoker bypasses RLS entirely.
+
+    This is not theoretical. Before migration 0006 every view here ran with
+    the owner's privileges, and core.v_upcoming_obligations — the deadline
+    tracker's own data source — returned both organizations' rows to a
+    session scoped to one of them, and to a session scoped to none.
+
+    The tables were the visible half of the problem; this is the other half,
+    and a view added later is the likeliest way it comes back.
+    """
+    with db.connect() as conn:
+        views = {
+            f"{r.schema}.{r.name}": r.invoker
+            for r in conn.execute(text("""
+                SELECT n.nspname AS schema, c.relname AS name,
+                       EXISTS (SELECT 1
+                                 FROM unnest(coalesce(c.reloptions,'{}')) o
+                                WHERE o = 'security_invoker=true') AS invoker
+                  FROM pg_class c
+                  JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE c.relkind = 'v' AND n.nspname IN ('core','perch')
+            """)).all()
+        }
+    leaking = sorted(name for name, invoker in views.items()
+                     if not invoker and name not in OWNER_SCOPED_VIEWS)
+    assert not leaking, (
+        "These views run with their owner's privileges, so they return every "
+        "organization's rows regardless of the session's tenant:\n  "
+        + "\n  ".join(leaking)
+        + "\n\nAdd WITH (security_invoker = true) in a migration, or — if the "
+          "view genuinely must be readable before a tenant is known — add it "
+          "to OWNER_SCOPED_VIEWS with the reason and keep it to the narrowest "
+          "possible columns."
+    )
+
+
+def test_no_stale_owner_scoped_view_exemptions(db):
+    with db.connect() as conn:
+        present = {f"{r[0]}.{r[1]}" for r in conn.execute(text("""
+            SELECT n.nspname, c.relname FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.relkind = 'v' AND n.nspname IN ('core','perch')
+        """)).all()}
+    stale = sorted(set(OWNER_SCOPED_VIEWS) - present)
+    assert not stale, f"OWNER_SCOPED_VIEWS names views that do not exist: {stale}"
+
+
 def test_app_roles_cannot_bypass_row_level_security(db):
     """With every organization in one database, BYPASSRLS is total access.
 
