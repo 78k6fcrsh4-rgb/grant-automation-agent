@@ -4,13 +4,18 @@ From v2.8.0 identity lives in the shared `core` schema, which needs real
 Postgres. Set TEST_DATABASE_URL to run these; without it they skip.
 """
 import os
+import uuid
 
 import pytest
 
-from tests.conftest import TEST_DATABASE_URL, migrate_test_database, needs_db
+from tests.conftest import (TEST_APP_DATABASE_URL, TEST_DATABASE_URL,
+                            admin_engine, migrate_test_database, needs_app_db,
+                            needs_db)
 
-if TEST_DATABASE_URL:
-    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+# The application runs as gma_app here, not as the admin. These tests include
+# one that checks a user of one organization cannot reach another's grant, and
+# the admin bypasses every policy — so run as the admin it would pass for the
+# wrong reason, or fail for one.
 os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ["LLM_REQUIRED"] = "false"
 os.environ["AUTO_MIGRATE"] = "false"
@@ -22,29 +27,36 @@ from app.db import SessionLocal  # noqa: E402
 from app.models.core_models import Tenant, User  # noqa: E402
 from app.services import auth_service  # noqa: E402
 
-pytestmark = needs_db
+pytestmark = [needs_db, needs_app_db]
 
 
 @pytest.fixture(scope="module", autouse=True)
 def seed():
+    """Two organizations, seeded by the admin because the app cannot.
+
+    Raw SQL rather than the ORM: the ORM session belongs to the application
+    engine, which is now gma_app and cannot create an organization at all.
+    """
+    from sqlalchemy import text
     migrate_test_database(TEST_DATABASE_URL)
-    db = SessionLocal()
-    try:
-        t1 = Tenant(name="DuPage Health Coalition", slug="dupage")
-        t2 = Tenant(name="Other Org", slug="other")
-        db.add_all([t1, t2]); db.commit(); db.refresh(t1); db.refresh(t2)
-        db.add_all([
-            User(tenant_id=t1.id, email="admin@dupage.org", full_name="Admin",
-                 hashed_password=auth_service.hash_password("dupagepass"), role="admin"),
-            User(tenant_id=t1.id, email="member@dupage.org",
-                 hashed_password=auth_service.hash_password("memberpass"), role="user"),
-            User(tenant_id=t2.id, email="admin@other.org",
-                 hashed_password=auth_service.hash_password("otherpass"), role="admin"),
-        ])
-        db.commit()
-        yield {"t1": t1.id, "t2": t2.id}
-    finally:
-        db.close()
+    eng = admin_engine()
+    t1, t2 = uuid.uuid4(), uuid.uuid4()
+    with eng.begin() as c:
+        for tid, name, slug in ((t1, "DuPage Health Coalition", "dupage"),
+                                (t2, "Other Org", "other")):
+            c.execute(text("INSERT INTO core.tenants (id,name,slug)"
+                           " VALUES (:i,:n,:s)"), {"i": tid, "n": name, "s": slug})
+        for tid, email, name, pw, role in (
+                (t1, "admin@dupage.org", "Admin", "dupagepass", "admin"),
+                (t1, "member@dupage.org", None, "memberpass", "user"),
+                (t2, "admin@other.org", None, "otherpass", "admin")):
+            c.execute(text("INSERT INTO core.users (id,tenant_id,email,full_name,"
+                           "hashed_password,role,is_active) VALUES"
+                           " (:u,:t,:e,:f,:h,:r,true)"),
+                      {"u": uuid.uuid4(), "t": tid, "e": email, "f": name,
+                       "h": auth_service.hash_password(pw), "r": role})
+    eng.dispose()
+    yield {"t1": t1, "t2": t2}
 
 
 @pytest.fixture
@@ -54,7 +66,11 @@ def client():
 
 
 def _login(client, email, password):
-    r = client.post("/api/auth/login", json={"email": email, "password": password})
+    # Organization first — login cannot scope a session without it, and the
+    # same address may exist in more than one organization.
+    org = "other" if email.endswith("@other.org") else "dupage"
+    r = client.post("/api/auth/login",
+                    json={"organization": org, "email": email, "password": password})
     return r
 
 

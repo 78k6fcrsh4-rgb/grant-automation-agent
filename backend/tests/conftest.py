@@ -20,6 +20,37 @@ needs_db = pytest.mark.skipif(
     not TEST_DATABASE_URL,
     reason="TEST_DATABASE_URL is not set; database tests skipped")
 
+# The application role. Some tests must run the app as gma_app rather than as
+# the admin, because the admin bypasses every row-level security policy and a
+# tenant-isolation test run that way proves nothing at all.
+TEST_APP_DATABASE_URL = os.getenv("TEST_APP_DATABASE_URL")
+needs_app_db = pytest.mark.skipif(
+    not TEST_APP_DATABASE_URL,
+    reason="TEST_APP_DATABASE_URL (the gma_app role) is not set")
+
+
+# app.db builds its engine once, at import, from DATABASE_URL — so whichever
+# test module imported first used to decide which role the whole suite ran
+# as. Setting it here, in the file pytest imports before any of them, makes
+# that deterministic: the application runs as the application role, exactly
+# as it does in production, and fixtures that need the admin ask for it
+# explicitly through admin_engine() below.
+if TEST_APP_DATABASE_URL:
+    os.environ["DATABASE_URL"] = TEST_APP_DATABASE_URL
+elif TEST_DATABASE_URL:
+    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+
+
+def admin_engine():
+    """A connection as the admin, for fixtures that must create tenants.
+
+    Creating an organization is an admin operation — core.tenants is
+    protected by a policy that a session belonging to no organization cannot
+    satisfy — so seeding cannot go through the application role.
+    """
+    from sqlalchemy import create_engine
+    return create_engine(TEST_DATABASE_URL, future=True)
+
 
 def migrate_test_database(url: str) -> None:
     """Bring the throwaway database to head, from a clean slate."""

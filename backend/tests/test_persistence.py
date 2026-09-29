@@ -9,8 +9,6 @@ import pytest
 
 from tests.conftest import TEST_DATABASE_URL, migrate_test_database, needs_db
 
-if TEST_DATABASE_URL:
-    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("SECRET_KEY", "test-secret-persistence")
 os.environ.setdefault("AUTO_MIGRATE", "false")
 
@@ -108,14 +106,34 @@ def test_leak_guard_passes_a_clean_payload():
 
 @pytest.fixture(scope="module")
 def db_session():
+    """An admin session, explicitly marked unscoped.
+
+    These tests are about what the persistence layer writes — the leak
+    guard, obligation de-duplication, the provenance and audit trail — not
+    about row-level security, which test_tenant_leakage covers as the
+    application role against two organizations. The session has to be the
+    admin's because the fixture creates an organization, which the app role
+    cannot do, and marking it unscoped says so rather than tripping the
+    guard by accident.
+    """
     migrate_test_database(TEST_DATABASE_URL)
-    from app.db import SessionLocal
-    session = SessionLocal()
+    from sqlalchemy.orm import sessionmaker
+    from tests.conftest import admin_engine
+
+    # Its own admin engine, deliberately not app.db.SessionLocal. app.db
+    # builds its engine once at import from DATABASE_URL, so sharing it
+    # would make the role these tests run as depend on which test module
+    # imported first — and test_auth now points that at gma_app, which
+    # cannot create an organization. An explicit engine here is immune to
+    # collection order.
+    eng = admin_engine()
+    session = sessionmaker(bind=eng, future=True)()
     try:
         yield session
     finally:
         session.rollback()
         session.close()
+        eng.dispose()
 
 
 @pytest.fixture(scope="module")

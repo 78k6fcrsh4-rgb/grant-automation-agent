@@ -1,8 +1,17 @@
 """Alembic environment.
 
-The connection URL always comes from DATABASE_URL, never from
-alembic.ini, because migrations run once per organization's database and
-the only thing that differs between them is the connection string.
+The connection URL comes from whoever is calling: an explicit
+sqlalchemy.url set by the caller wins, and DATABASE_URL is the fallback.
+alembic.ini supplies neither, because migrations run once per
+organization's database and the only thing that differs between them is
+the connection string.
+
+The precedence matters. DATABASE_URL used to win unconditionally, which
+meant a caller that passed a URL explicitly — the test helper does, with
+admin credentials — was silently overridden by whatever the environment
+held. Once the application role went into DATABASE_URL, migrations started
+running as a role that cannot CREATE SCHEMA, and failed with "permission
+denied for database".
 
 The version table lives in `core` so a database can be inspected for its
 migration state without reaching into public.
@@ -29,7 +38,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+url = config.get_main_option("sqlalchemy.url") or os.getenv("DATABASE_URL")
 if not url:
     raise RuntimeError("DATABASE_URL is not set and alembic.ini has no sqlalchemy.url")
 if url.startswith("sqlite"):
