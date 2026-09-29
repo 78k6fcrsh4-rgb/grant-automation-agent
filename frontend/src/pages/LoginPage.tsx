@@ -6,6 +6,15 @@ import { useAuth } from '../context/AuthContext';
 export function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
+  // Prefilled from the last successful sign-in on this browser. A name, not
+  // a credential; the token lives elsewhere and is not read here.
+  const [organization, setOrganization] = useState(() => {
+    try {
+      return localStorage.getItem('gma.organization') ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -18,10 +27,13 @@ export function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email.trim().toLowerCase(), password);
+      await login(organization.trim().toLowerCase(), email.trim().toLowerCase(), password);
       navigate('/', { replace: true });
     } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Sign in failed. Check your email and password.');
+      setError(
+        err?.response?.data?.detail ||
+          'Sign in failed. Check your organisation, email and password.',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -34,6 +46,23 @@ export function LoginPage() {
         <p className="mt-1 text-sm text-gray-500">Sign in to continue</p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Organisation</label>
+            <input
+              type="text"
+              required
+              autoComplete="organization"
+              autoFocus
+              placeholder="e.g. dupage"
+              value={organization}
+              onChange={(e) => setOrganization(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              The short name your organisation was set up under. Ask whoever
+              set up your account if you are not sure.
+            </p>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Email</label>
             <input

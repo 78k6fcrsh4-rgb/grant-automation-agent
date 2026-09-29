@@ -172,8 +172,19 @@ export interface LoginResponse {
 }
 
 export const authApi = {
-  login: async (email: string, password: string): Promise<LoginResponse> => {
-    const res = await api.post<LoginResponse>('/api/auth/login', { email, password });
+  // The organisation comes first because the server cannot scope anything
+  // without it: several organisations share one database, and the same
+  // address can exist in more than one of them.
+  login: async (
+    organization: string,
+    email: string,
+    password: string,
+  ): Promise<LoginResponse> => {
+    const res = await api.post<LoginResponse>('/api/auth/login', {
+      organization,
+      email,
+      password,
+    });
     return res.data;
   },
   me: async (): Promise<AuthUser> => {

@@ -6,7 +6,7 @@ import type { AuthUser } from '../services/api';
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (organization: string, email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -29,10 +29,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const res = await authApi.login(email, password);
+  const login = async (organization: string, email: string, password: string) => {
+    const res = await authApi.login(organization, email, password);
     setToken(res.access_token);
     setUser(res.user);
+    // Remember which organisation, so returning users do not retype it. This
+    // is a name, not a credential — the token is what grants access, and it
+    // is held separately.
+    try {
+      localStorage.setItem('gma.organization', organization);
+    } catch {
+      /* private browsing, or storage disabled — not worth failing a login over */
+    }
   };
 
   const logout = () => {
