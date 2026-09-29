@@ -57,6 +57,15 @@ def two_organizations():
                 "status,confirmed_by,confirmed_at) VALUES"
                 " (:g,:t,'Funder',:title,'active',:u,now())"),
                 {"g": gid, "t": tid, "u": uid, "title": f"{name} grant"})
+            # A provenance row, so a view over three protected tables has
+            # something to return.
+            # A human correction has to say who made it — provenance is the
+            # point of the table — so edited_by and edited_at come too.
+            conn.execute(text(
+                "INSERT INTO core.grant_field_provenance (grant_id, field_name,"
+                " machine_value, human_value, edited_by, edited_at)"
+                " VALUES (:g, :f, '1', '2', :u, now())"),
+                {"g": gid, "f": f"{slug}_amount", "u": uid})
     yield {DUPAGE: "DuPage Health Coalition grant",
            DEBORAH: "Deborah's Place grant"}
     admin.dispose()
@@ -165,3 +174,31 @@ def test_refuses_to_run_as_a_privileged_role():
 
 def test_accepts_the_application_role(engine):
     assert_not_privileged(engine)      # must not raise
+
+
+def test_a_view_is_scoped_like_the_tables_beneath_it(Session, two_organizations):
+    """The structural check says security_invoker is set; this says it works.
+
+    Before migration 0006 every view ran with the owner's privileges and
+    returned both organizations' rows to a session scoped to one — with RLS
+    enabled on all the underlying tables and the drift test passing. The
+    option being present is not the same as the scoping holding, and only
+    one of those two things is what anyone actually cares about.
+
+    core.v_extraction_overrides joins grant_field_provenance, grants and
+    users, all three protected, which is the shape most likely to go wrong.
+    """
+    with tenant_scope(DUPAGE):
+        with Session() as s:
+            fields = sorted(r[0] for r in s.execute(
+                text("SELECT field_name FROM core.v_extraction_overrides")))
+    assert fields == ["dupage_amount"], (
+        f"the view returned {fields} to a session scoped to DuPage — a view "
+        f"without security_invoker bypasses every policy beneath it"
+    )
+
+    with unscoped("test: a view must disclose nothing with no tenant set"):
+        with Session() as s:
+            leaked = s.execute(text(
+                "SELECT count(*) FROM core.v_extraction_overrides")).scalar()
+    assert leaked == 0, f"the view returned {leaked} rows with no tenant set"
