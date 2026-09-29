@@ -29,6 +29,13 @@ def migrate_test_database(url: str) -> None:
 
     engine = create_engine(url)
     with engine.connect() as conn:
+        # Both schemas, not just core. Dropping core alone leaves every
+        # perch table standing — CASCADE removes the foreign keys that
+        # depend on core, not the tables holding them — and the next run
+        # of migration 0003 then fails with "relation reporting_periods
+        # already exists". That made a second test run against the same
+        # database impossible from the moment 0003 landed.
+        conn.execute(text("DROP SCHEMA IF EXISTS perch CASCADE"))
         conn.execute(text("DROP SCHEMA IF EXISTS core CASCADE"))
         conn.commit()
     engine.dispose()
