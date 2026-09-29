@@ -68,6 +68,36 @@ def current_tenant() -> Optional[str]:
     return _current_tenant.get()
 
 
+def bind_session_to_tenant(session, tenant_id: Union[str, uuid.UUID]) -> None:
+    """Scope one Session object to one organization.
+
+    Preferred over the ContextVar inside FastAPI. Sync dependencies and sync
+    endpoints run in threadpool workers, and a ContextVar set in one worker
+    is not reliably visible in another — so ambient context is the wrong
+    place to keep something that must never be wrong. The tenant travels on
+    the Session instead, which is the object the queries actually use.
+
+    Must be called before the session's first query: the scoping is applied
+    when its transaction begins, and a transaction that has already begun
+    cannot be retrospectively scoped.
+    """
+    value = str(tenant_id)
+    uuid.UUID(value)                      # reject non-ids here, loudly
+    if session.in_transaction():
+        raise NoTenantScope(
+            "bind_session_to_tenant() was called after the session had "
+            "already begun a transaction, so earlier statements in it ran "
+            "unscoped. Bind before the first query."
+        )
+    session.info["tenant_id"] = value
+
+
+def mark_session_unscoped(session, reason: str) -> None:
+    """Permit one Session to run with no organization. See unscoped()."""
+    log.info("unscoped database session: %s", reason)
+    session.info["unscoped"] = reason
+
+
 @contextmanager
 def tenant_scope(tenant_id: Union[str, uuid.UUID]) -> Iterator[str]:
     """Bind everything in this block to one organization."""
@@ -111,9 +141,11 @@ def install(engine) -> None:
     def _scope_transaction(session, transaction, connection):  # noqa: ANN001
         if connection.engine is not engine:
             return
-        tenant = _current_tenant.get()
+        # The session's own binding wins. The ContextVar is the fallback,
+        # for code that is not running under a FastAPI request.
+        tenant = session.info.get("tenant_id") or _current_tenant.get()
         if tenant is None:
-            if _unscoped.get():
+            if session.info.get("unscoped") or _unscoped.get():
                 return
             raise NoTenantScope(
                 "A database session began with no organization in context. "

@@ -16,8 +16,9 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from app.tenancy import (NoTenantScope, assert_not_privileged, install,
-                         tenant_scope, unscoped)
+from app.tenancy import (NoTenantScope, assert_not_privileged,
+                         bind_session_to_tenant, install,
+                         mark_session_unscoped, tenant_scope, unscoped)
 from tests.conftest import TEST_DATABASE_URL, migrate_test_database, needs_db
 
 TEST_APP_DATABASE_URL = os.getenv("TEST_APP_DATABASE_URL")
@@ -202,3 +203,56 @@ def test_a_view_is_scoped_like_the_tables_beneath_it(Session, two_organizations)
             leaked = s.execute(text(
                 "SELECT count(*) FROM core.v_extraction_overrides")).scalar()
     assert leaked == 0, f"the view returned {leaked} rows with no tenant set"
+
+
+# ------------------------------------------------- binding to the session
+
+def test_binding_the_session_scopes_it(Session, two_organizations):
+    """The path FastAPI uses: the tenant travels on the Session object."""
+    with Session() as s:
+        bind_session_to_tenant(s, DEBORAH)
+        assert titles(s) == [two_organizations[DEBORAH]]
+
+
+def test_the_session_binding_beats_a_stale_ambient_value(Session, two_organizations):
+    """If the two ever disagree, the explicit one must win.
+
+    A ContextVar left over from earlier work in the same worker thread is
+    exactly the kind of thing that would otherwise scope a request to the
+    wrong organization while everything looks correct.
+    """
+    with tenant_scope(DUPAGE):                 # ambient says one thing...
+        with Session() as s:
+            bind_session_to_tenant(s, DEBORAH)  # ...the session says another
+            assert titles(s) == [two_organizations[DEBORAH]], \
+                "the ambient value overrode the session's explicit binding"
+
+
+def test_binding_after_the_first_query_is_refused(Session):
+    """Retrospective scoping is not scoping — earlier statements already ran.
+
+    The session has to be marked unscoped first, because otherwise the guard
+    stops the transaction from beginning at all: an unscoped `SELECT 1` is
+    refused before it reaches the database. That is stronger than this test
+    needs and worth knowing.
+    """
+    with Session() as s:
+        mark_session_unscoped(s, "test: begin a transaction before binding")
+        s.execute(text("SELECT 1"))            # transaction begins here
+        with pytest.raises(NoTenantScope):
+            bind_session_to_tenant(s, DUPAGE)
+
+
+def test_an_unmarked_session_still_raises(Session):
+    with pytest.raises(NoTenantScope):
+        with Session() as s:
+            s.execute(text("SELECT count(*) FROM core.grants"))
+
+
+def test_marking_a_session_unscoped_permits_it_but_shows_nothing(Session):
+    with Session() as s:
+        mark_session_unscoped(s, "test: reading the login directory")
+        assert titles(s) == []
+        directory = s.execute(
+            text("SELECT count(*) FROM core.tenant_directory")).scalar()
+    assert directory == 2, "the login directory must be readable unscoped"
