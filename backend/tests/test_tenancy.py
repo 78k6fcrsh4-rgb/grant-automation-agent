@@ -1,6 +1,16 @@
-"""Does the scoping actually hold — especially across a reused connection."""
-import sys
-sys.path.insert(0, "/tmp/tenancy")
+"""Does the tenant scoping hold — especially across a reused connection.
+
+Needs two connection strings, because the point is to exercise the rules as
+the *application* role rather than as the admin that migrations run as:
+
+    TEST_DATABASE_URL=postgresql+psycopg://<admin>@localhost:5432/gma_test
+    TEST_APP_DATABASE_URL=postgresql+psycopg://gma_app:<pw>@localhost:5432/gma_test
+
+Without the second one these skip. A run that skips them proves nothing
+about isolation — the admin bypasses every policy.
+"""
+import os
+import uuid
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -8,18 +18,56 @@ from sqlalchemy.orm import sessionmaker
 
 from app.tenancy import (NoTenantScope, assert_not_privileged, install,
                          tenant_scope, unscoped)
+from tests.conftest import TEST_DATABASE_URL, migrate_test_database, needs_db
 
-APP_URL   = "postgresql+psycopg://gma_app@localhost:5433/gma_dupage"
-ADMIN_URL = "postgresql+psycopg://gpadmin@localhost:5433/gma_dupage"
-DUPAGE  = "aaaaaaaa-0000-0000-0000-000000000001"
+TEST_APP_DATABASE_URL = os.getenv("TEST_APP_DATABASE_URL")
+
+pytestmark = [
+    needs_db,
+    pytest.mark.skipif(
+        not TEST_APP_DATABASE_URL,
+        reason="TEST_APP_DATABASE_URL (the gma_app role) is not set; tenant "
+               "isolation cannot be tested as the admin, which bypasses every "
+               "policy"),
+]
+
+DUPAGE = "aaaaaaaa-0000-0000-0000-000000000001"
 DEBORAH = "bbbbbbbb-0000-0000-0000-000000000002"
 
 
 @pytest.fixture(scope="module")
-def engine():
-    # pool_size=1, max_overflow=0: every session in this module is handed the
-    # SAME physical connection, which is the arrangement a leak needs.
-    eng = create_engine(APP_URL, pool_size=1, max_overflow=0, future=True)
+def two_organizations():
+    """Two tenants with overlapping data, created as the admin."""
+    migrate_test_database(TEST_DATABASE_URL)
+    admin = create_engine(TEST_DATABASE_URL, future=True)
+    with admin.begin() as conn:
+        for tid, name, slug in ((DUPAGE, "DuPage Health Coalition", "dupage"),
+                                (DEBORAH, "Deborah's Place", "deborahs")):
+            uid = str(uuid.uuid5(uuid.UUID(tid), "user"))
+            gid = str(uuid.uuid5(uuid.UUID(tid), "grant"))
+            conn.execute(text(
+                "INSERT INTO core.tenants (id,name,slug) VALUES (:i,:n,:s)"),
+                {"i": tid, "n": name, "s": slug})
+            conn.execute(text(
+                "INSERT INTO core.users (id,tenant_id,email,hashed_password,role)"
+                " VALUES (:u,:t,:e,'x','admin')"),
+                {"u": uid, "t": tid, "e": f"{slug}@example.test"})
+            conn.execute(text(
+                "INSERT INTO core.grants (id,tenant_id,funder_name_raw,title,"
+                "status,confirmed_by,confirmed_at) VALUES"
+                " (:g,:t,'Funder',:title,'active',:u,now())"),
+                {"g": gid, "t": tid, "u": uid, "title": f"{name} grant"})
+    yield {DUPAGE: "DuPage Health Coalition grant",
+           DEBORAH: "Deborah's Place grant"}
+    admin.dispose()
+
+
+@pytest.fixture(scope="module")
+def engine(two_organizations):
+    # pool_size=1, max_overflow=0: every session here is handed the SAME
+    # physical connection, which is the arrangement a leak needs.
+    eng = create_engine(TEST_APP_DATABASE_URL, pool_size=1, max_overflow=0,
+                        future=True)
     install(eng)
     yield eng
     eng.dispose()
@@ -34,16 +82,15 @@ def titles(session):
     return sorted(r[0] for r in session.execute(text("SELECT title FROM core.grants")))
 
 
-def test_a_scoped_session_sees_only_its_own_organization(Session):
-    with tenant_scope(DUPAGE):
-        with Session() as s:
-            assert titles(s) == ["DuPage grant"]
-    with tenant_scope(DEBORAH):
-        with Session() as s:
-            assert titles(s) == ["Deborah grant"]
+def test_a_scoped_session_sees_only_its_own_organization(Session, two_organizations):
+    for tenant, expected in two_organizations.items():
+        with tenant_scope(tenant):
+            with Session() as s:
+                assert titles(s) == [expected]
 
 
 def test_an_unscoped_session_raises_rather_than_returning_nothing(Session):
+    """Silence would be safe but indistinguishable from "no data yet"."""
     with pytest.raises(NoTenantScope):
         with Session() as s:
             s.execute(text("SELECT 1 FROM core.grants"))
@@ -55,63 +102,60 @@ def test_unscoped_permits_the_session_but_grants_no_visibility(Session):
             assert titles(s) == []
 
 
-def test_the_setting_is_transaction_local_on_its_own(engine):
+def test_the_setting_is_transaction_local_on_its_own(engine, two_organizations):
     """The primary guarantee, tested with the safety net removed.
 
-    The obvious version of this test closes the session, which returns the
+    The obvious version of this closes the session, which returns the
     connection to the pool and fires the checkin reset — so it passes even
     when set_config is called with is_local=false and the setting is really
-    session-lived. Verified: flipping that boolean left all eight tests
-    green. The belt-and-braces was hiding the failure of the thing it is
-    supposed to be backing up.
+    session-lived. That was verified the hard way: flipping that boolean
+    left every other test in this file green. The belt-and-braces was
+    hiding the failure of the thing it exists to back up.
 
     So this holds ONE connection checked out, commits the scoped
-    transaction, and looks at the setting before any cleanup can run. If
-    SET LOCAL is not doing the work, the tenant is still there.
+    transaction, and reads the setting before any cleanup can run.
     """
-    from sqlalchemy.orm import sessionmaker as _sm
     with engine.connect() as conn:
         with tenant_scope(DEBORAH):
-            with _sm(bind=conn, future=True)() as s:
-                assert titles(s) == ["Deborah grant"]
+            with sessionmaker(bind=conn, future=True)() as s:
+                assert titles(s) == [two_organizations[DEBORAH]]
                 s.commit()
         leftover = conn.exec_driver_sql(
             "SELECT current_setting('app.tenant_id', true)").scalar()
     assert leftover in (None, ""), (
         f"app.tenant_id survived the transaction as {leftover!r}. It is "
-        f"session-lived, not transaction-lived — check that set_config's "
-        f"third argument is true. The next request on this connection would "
-        f"be scoped to the previous one's organization."
+        f"session-lived, not transaction-lived — check set_config's third "
+        f"argument. The next request on this connection would be scoped to "
+        f"the previous one's organization."
     )
 
 
-def test_a_reused_connection_carries_nothing_between_organizations(Session, engine):
+def test_a_reused_connection_carries_nothing_between_organizations(
+        Session, engine, two_organizations):
     """The leak this module exists to prevent, on one physical connection."""
-    before = engine.pool.checkedin()
     with tenant_scope(DEBORAH):
         with Session() as s:
-            assert titles(s) == ["Deborah grant"]
-    # Same connection, different organization, immediately afterwards.
+            assert titles(s) == [two_organizations[DEBORAH]]
     with tenant_scope(DUPAGE):
         with Session() as s:
             seen = titles(s)
-    assert seen == ["DuPage grant"], f"leaked across a reused connection: {seen}"
+    assert seen == [two_organizations[DUPAGE]], \
+        f"leaked across a reused connection: {seen}"
     assert engine.pool.size() == 1, "the pool was supposed to hold one connection"
-    assert before >= 0
 
 
-def test_repeated_alternation_never_leaks(Session):
-    """Twenty alternations — a leak that needs a particular ordering shows up."""
-    for i in range(20):
-        tenant, expected = ((DUPAGE, "DuPage grant") if i % 2 == 0
-                            else (DEBORAH, "Deborah grant"))
+def test_repeated_alternation_never_leaks(Session, two_organizations):
+    """Twenty alternations, in case a leak needs a particular ordering."""
+    order = [DUPAGE, DEBORAH] * 10
+    for i, tenant in enumerate(order):
         with tenant_scope(tenant):
             with Session() as s:
-                assert titles(s) == [expected], f"iteration {i}"
+                assert titles(s) == [two_organizations[tenant]], f"iteration {i}"
 
 
 def test_refuses_to_run_as_a_privileged_role():
-    admin = create_engine(ADMIN_URL, future=True)
+    """Pointing DATABASE_URL at the admin would make every policy moot."""
+    admin = create_engine(TEST_DATABASE_URL, future=True)
     try:
         with pytest.raises(RuntimeError, match="Refusing to start"):
             assert_not_privileged(admin)
