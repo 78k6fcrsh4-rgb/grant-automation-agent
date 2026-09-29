@@ -3,6 +3,36 @@ import type { FormEvent } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+/** Why signing in failed, distinguished by layer.
+ *
+ * These used to collapse into one message, and it cost an afternoon: a
+ * backend that was not running looked exactly like a wrong password, so the
+ * password got reset — twice — while the real problem was that nothing was
+ * listening on port 8000. Only 401 and 403 are about what the person typed.
+ * Everything else is about the system, and saying so is the difference
+ * between checking a log and doubting your own credentials.
+ *
+ * The 401 text still comes from the server, which deliberately returns one
+ * message for unknown organisation, unknown email and wrong password so the
+ * platform cannot be used to enumerate which nonprofits are on it.
+ */
+function describeLoginFailure(err: any): string {
+  const status = err?.response?.status;
+  if (status === undefined) {
+    return 'Cannot reach the server — it may not be running. Your credentials have not been checked yet.';
+  }
+  if (status === 401 || status === 403) {
+    return err?.response?.data?.detail ?? 'Incorrect organisation, email or password.';
+  }
+  if (status === 422) {
+    return 'The server rejected the shape of this request, which usually means the app and the server are different versions.';
+  }
+  if (status >= 500) {
+    return `The server failed while signing in (HTTP ${status}). This is not a problem with what you typed — check the backend log.`;
+  }
+  return err?.response?.data?.detail ?? `Sign in failed (HTTP ${status}).`;
+}
+
 export function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
@@ -30,10 +60,7 @@ export function LoginPage() {
       await login(organization.trim().toLowerCase(), email.trim().toLowerCase(), password);
       navigate('/', { replace: true });
     } catch (err: any) {
-      setError(
-        err?.response?.data?.detail ||
-          'Sign in failed. Check your organisation, email and password.',
-      );
+      setError(describeLoginFailure(err));
     } finally {
       setSubmitting(false);
     }
