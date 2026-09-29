@@ -38,6 +38,12 @@ engine = create_engine(
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
 
+# Every session on this engine is now scoped to one organization or refuses
+# to run. See app/tenancy.py — this line is what makes that true, and
+# removing it would leave the policies comparing against nothing.
+from app import tenancy  # noqa: E402  (after engine/SessionLocal exist)
+tenancy.install(engine)
+
 # Every model on this Base lives in the `core` schema, so the ORM and the
 # migrations agree without repeating schema= on each table.
 Base = declarative_base(metadata=MetaData(schema=CORE_SCHEMA))
@@ -73,6 +79,12 @@ def init_db() -> None:
     if os.getenv("AUTO_MIGRATE", "false").lower() in ("1", "true", "yes"):
         _run_migrations()
         return
+
+    # A role that bypasses row-level security makes every policy moot, and
+    # with several organizations in one database that is unrestricted access
+    # to all of them. Refuse rather than serve.
+    if _is_migrated():
+        tenancy.assert_not_privileged(engine)
 
     if not _is_migrated():
         raise RuntimeError(

@@ -6,6 +6,11 @@ from pydantic import BaseModel, EmailStr
 
 
 class LoginRequest(BaseModel):
+    # Organization first, and required. A session cannot be scoped until we
+    # know which organization the person belongs to, and matching on email
+    # alone stops being correct the moment two organizations share a
+    # database — the same address could exist in both.
+    organization: str
     email: EmailStr
     password: str
 
