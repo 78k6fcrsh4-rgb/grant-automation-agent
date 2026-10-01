@@ -31,7 +31,22 @@
 set -euo pipefail
 
 ENV_FILE="${AZURE_ENV_FILE:-$HOME/WorkBench/.env.azure}"
-TARGET_DB="${1:-postgres}"
+TARGET_DB="postgres"
+DRIVER="postgresql"
+
+# --sqlalchemy emits postgresql+psycopg://, which alembic needs and psql
+# rejects. Without it the two tools want different spellings of the same URL
+# and the difference is a sed in a pasted command, which is one more thing to
+# get wrong at the point where it matters most.
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --sqlalchemy) DRIVER="postgresql+psycopg"; shift ;;
+        -*) echo "unknown option: $1" >&2
+            echo "usage: $0 [<database>] [--sqlalchemy]" >&2
+            exit 2 ;;
+        *)  TARGET_DB="$1"; shift ;;
+    esac
+done
 
 if [[ ! -f "$ENV_FILE" ]]; then
     echo "error: no environment file at ${ENV_FILE}" >&2
@@ -45,11 +60,11 @@ if [[ -t 1 ]]; then
     echo "           export ADMIN_DATABASE_URL=\"\$($0 ${TARGET_DB})\"" >&2
 fi
 
-python3 - "$ENV_FILE" "$TARGET_DB" <<'PY'
+python3 - "$ENV_FILE" "$TARGET_DB" "$DRIVER" <<'PY'
 import sys
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
-env_file, target_db = sys.argv[1], sys.argv[2]
+env_file, target_db, driver = sys.argv[1], sys.argv[2], sys.argv[3]
 
 raw = None
 with open(env_file, encoding="utf-8") as handle:
@@ -125,5 +140,5 @@ query = parts.query or "sslmode=require"
 if "sslmode" not in query:
     query += "&sslmode=require"
 
-print(urlunsplit(("postgresql", netloc, "/" + target_db.lstrip("/"), query, "")))
+print(urlunsplit((driver, netloc, "/" + target_db.lstrip("/"), query, "")))
 PY
