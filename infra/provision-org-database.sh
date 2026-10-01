@@ -49,20 +49,42 @@ fi
 DB="gma_${SLUG}"
 BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../backend" && pwd)"
 
+# Everything below runs through PYBIN: the migration, and the small snippets
+# that rewrite connection URLs and generate role passwords.
+#
+# Prefer the backend virtualenv's interpreter over whatever python3 is on
+# PATH. On a Mac with several Homebrew Pythons, python3 is whichever one
+# Homebrew last linked, and the virtualenv is usually a different version --
+# so the import check below failed for someone who had the dependencies
+# installed perfectly well, and told them to create a virtualenv they already
+# had. dev-up.sh has always called the virtualenv's python directly; this
+# brings this script into line with it.
+PYBIN="$BACKEND_DIR/.venv/bin/python3"
+if [[ ! -x "$PYBIN" ]]; then
+    PYBIN="python3"
+fi
+
 command -v psql >/dev/null || {
     echo "error: psql not found. On macOS: brew install libpq && \\" >&2
     echo "       echo 'export PATH=\"/opt/homebrew/opt/libpq/bin:\$PATH\"' >> ~/.zshrc" >&2
     exit 1
 }
 
-# The migration runs with whatever python3 is on PATH, so the backend's
-# virtualenv has to be active. Failing here beats failing halfway through,
-# with the database created but unmigrated.
-python3 -c "import alembic, sqlalchemy, psycopg" 2>/dev/null || {
-    echo "error: alembic, sqlalchemy and psycopg must be importable." >&2
-    echo "       Activate the backend virtualenv first:" >&2
-    echo "         cd backend && python3 -m venv .venv && source .venv/bin/activate" >&2
-    echo "         pip install -r requirements.txt" >&2
+# Failing here beats failing halfway through, with the database created but
+# unmigrated.
+"$PYBIN" -c "import alembic, sqlalchemy, psycopg" 2>/dev/null || {
+    echo "error: alembic, sqlalchemy and psycopg are not importable by" >&2
+    echo "       ${PYBIN}" >&2
+    if [[ "$PYBIN" == "python3" ]]; then
+        echo "       The backend virtualenv was not found at" >&2
+        echo "         ${BACKEND_DIR}/.venv/bin/python3" >&2
+        echo "       Create it:" >&2
+        echo "         cd backend && python3.12 -m venv .venv" >&2
+        echo "         ./.venv/bin/python -m pip install -r requirements.txt" >&2
+    else
+        echo "       The virtualenv exists but is missing dependencies:" >&2
+        echo "         ${PYBIN} -m pip install -r ${BACKEND_DIR}/requirements.txt" >&2
+    fi
     exit 1
 }
 
@@ -74,7 +96,7 @@ python3 -c "import alembic, sqlalchemy, psycopg" 2>/dev/null || {
 # `set -euo pipefail` that kills the script silently, before the first
 # echo, with exit 141 and no output at all.
 gen_password() {
-    python3 -c "import secrets, string; print(''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32)))"
+    "$PYBIN" -c "import secrets, string; print(''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32)))"
 }
 GMA_ROLE_CREATED="no"
 GMA_PW="$(gen_password)"
@@ -133,7 +155,7 @@ fi
 
 # Swap the database name in the admin URL, preserving any query string
 # (sslmode=require on Azure).
-ORG_URL="$(python3 - "$ADMIN_URL" "$DB" <<'PY'
+ORG_URL="$("$PYBIN" - "$ADMIN_URL" "$DB" <<'PY'
 import sys
 from urllib.parse import urlsplit, urlunsplit
 parts = urlsplit(sys.argv[1])
@@ -143,7 +165,7 @@ PY
 
 echo "==> Migrating ${DB} to head"
 cd "$BACKEND_DIR"
-DATABASE_URL="${ORG_URL/postgresql:\/\//postgresql+psycopg://}" python3 -m alembic upgrade head
+DATABASE_URL="${ORG_URL/postgresql:\/\//postgresql+psycopg://}" "$PYBIN" -m alembic upgrade head
 
 # Privileges are checked from the admin session, which needs no role password
 # and so runs on every invocation — including re-runs against a server whose
@@ -175,7 +197,7 @@ SQL
 
 if [[ "$GMA_ROLE_CREATED" == "yes" ]]; then
     echo "==> Verifying gma_app can actually log in"
-    GMA_TEST_URL="$(python3 - "$ORG_URL" "$GMA_PW" <<'PY'
+    GMA_TEST_URL="$("$PYBIN" - "$ORG_URL" "$GMA_PW" <<'PY'
 import sys, urllib.parse
 from urllib.parse import urlsplit, urlunsplit
 p = urlsplit(sys.argv[1])
@@ -195,7 +217,7 @@ fi
 echo
 echo "==> Done. Connection strings for ${SLUG} (store in Key Vault, not in a file):"
 echo
-APP_URL="$(python3 - "$ORG_URL" <<'PY'
+APP_URL="$("$PYBIN" - "$ORG_URL" <<'PY'
 import sys
 from urllib.parse import urlsplit, urlunsplit
 p = urlsplit(sys.argv[1])
