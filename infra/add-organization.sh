@@ -3,6 +3,15 @@
 #
 #   ADMIN_DATABASE_URL='postgresql://gpadmin:...@host:5432/grants?sslmode=require' \
 #     ./infra/add-organization.sh dupage "DuPage Health Coalition"
+#     ./infra/add-organization.sh dupage "DuPage Health Coalition" --fiscal-year-start 7
+#
+# --fiscal-year-start is the month the organization's fiscal year begins, 1 to
+# 12. It defaults to 1 (January) because that is what the old deployment-wide
+# PERCH_FY_START_MONTH meant when unset, so nothing changes silently -- but a
+# default is not an answer. Perch computes every year-to-date figure from this,
+# and a July-June organization left on January reports nine months of revenue
+# as "year to date" when the truth is three. Nothing throws. Confirm it in
+# writing with their finance lead before their first report.
 #
 # This is an admin operation and cannot be anything else. core.tenants is
 # protected by a policy comparing against the session's organization, and a
@@ -17,11 +26,33 @@ set -euo pipefail
 SLUG="${1:-}"
 NAME="${2:-}"
 if [[ -z "$SLUG" || -z "$NAME" ]]; then
-    echo "usage: $0 <slug> \"<Organization Name>\"" >&2
+    echo "usage: $0 <slug> \"<Organization Name>\" [--fiscal-year-start N]" >&2
     exit 2
 fi
+shift 2 || true
+
+FY_START=1
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --fiscal-year-start)
+            FY_START="${2:-}"; shift 2 ;;
+        *)
+            echo "unknown argument: $1" >&2
+            echo "usage: $0 <slug> \"<Organization Name>\" [--fiscal-year-start N]" >&2
+            exit 2 ;;
+    esac
+done
+
 if ! [[ "$SLUG" =~ ^[a-z][a-z0-9-]{1,40}$ ]]; then
     echo "error: slug must be lowercase letters, digits and hyphens." >&2
+    exit 2
+fi
+# Checked here as well as by the CHECK constraint, so a typo is a usage error
+# rather than a database error halfway through.
+if ! [[ "$FY_START" =~ ^([1-9]|1[0-2])$ ]]; then
+    echo "error: --fiscal-year-start must be a month from 1 to 12, got '${FY_START}'." >&2
+    echo "       1 = January, 7 = July. Confirm it with the organization's" >&2
+    echo "       finance lead: every year-to-date figure is computed from it." >&2
     exit 2
 fi
 
@@ -95,13 +126,23 @@ fi
 #
 # head -1: psql prints the command tag ("INSERT 0 1") after the returned row,
 # and without it the id carries that text into every message below.
-NEW_ID="$(psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -v name="$NAME" -v slug="$SLUG" -tA -f - <<'SQL' | head -1
-INSERT INTO core.tenants (name, slug) VALUES (:'name', :'slug') RETURNING id;
+NEW_ID="$(psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -v name="$NAME" -v slug="$SLUG" -v fy="$FY_START" -tA -f - <<'SQL' | head -1
+INSERT INTO core.tenants (name, slug, fiscal_year_start_month)
+VALUES (:'name', :'slug', :'fy'::smallint) RETURNING id;
 SQL
 )"
 
+MONTHS=(x January February March April May June July August September October November December)
 echo "==> Created '${NAME}' (${SLUG})"
-echo "    tenant id: ${NEW_ID}"
+echo "    tenant id:    ${NEW_ID}"
+echo "    fiscal year:  starts ${MONTHS[$FY_START]} (month ${FY_START})"
+if [[ "$FY_START" == "1" ]]; then
+    echo "                  that is the DEFAULT, not a confirmed answer. If this"
+    echo "                  organization runs July-June or anything else, fix it"
+    echo "                  before their first report:"
+    echo "                    UPDATE core.tenants SET fiscal_year_start_month = 7"
+    echo "                     WHERE slug = '${SLUG}';"
+fi
 echo
 echo "    Next: seed its first user. On the app, set"
 echo "      SEED_TENANT_SLUG=${SLUG}"
