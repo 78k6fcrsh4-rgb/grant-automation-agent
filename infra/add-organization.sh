@@ -51,15 +51,54 @@ if ! WHO="$(psql "$ADMIN_URL" -tAc "SELECT current_user || '@' || current_databa
 fi
 echo "==> Connected as ${WHO}"
 
-EXISTING="$(psql "$ADMIN_URL" -tAc "SELECT id FROM core.tenants WHERE lower(slug) = lower('${SLUG}')")"
+# The SQL arrives on stdin, not through -c, and the values arrive as psql
+# variables interpolated with :'slug'. Two things forced that shape, both
+# confirmed by running it rather than reading it:
+#
+#   psql does not expand variables in a -c command at all. With -c, :'slug'
+#   reaches the server literally and it reports a syntax error at ":".
+#
+#   -tAc is a cluster whose c takes the next argument as the command, so
+#   "psql -tAc -v slug=x SQL" ran "-v slug=x" as the statement and discarded
+#   the SQL with a warning.
+#
+# What this replaced was worse than either: the name was pasted into the SQL by
+# the shell, with apostrophes doubled by a ${NAME//...} expansion that does not
+# work inside double quotes -- a backslash before a single quote is not an
+# escape there, so the backslashes survived into the statement and
+# "Deborah's Place" arrived as 'Deborah\'\'s Place'. Every organisation with an
+# apostrophe in its name failed, and any name with a quote in it was an
+# injection. Letting psql do the quoting fixes both at once.
+EXISTING="$(psql "$ADMIN_URL" -v slug="$SLUG" -tA -f - <<'SQL' | head -1
+SELECT id FROM core.tenants WHERE lower(slug) = lower(:'slug');
+SQL
+)"
 if [[ -n "$EXISTING" ]]; then
     echo "    '${SLUG}' already exists: ${EXISTING}"
     echo "    Nothing to do."
     exit 0
 fi
 
-NEW_ID="$(psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -tAc \
-    "INSERT INTO core.tenants (name, slug) VALUES ('${NAME//\'/\'\'}', '${SLUG}') RETURNING id")"
+# Values go in as psql variables, interpolated with :'name', rather than being
+# pasted into the SQL by the shell.
+#
+# The previous version doubled apostrophes itself with a ${NAME//...} expansion,
+# and that does not work: the expansion sits inside a double-quoted string,
+# where a backslash before a single quote is not an escape, so the backslashes
+# survived into the statement. "Deborah's Place" reached Postgres as
+# 'Deborah\'\'s Place' and failed with a syntax error -- so did every other
+# organisation whose name contains an apostrophe, which is a great many
+# nonprofits.
+#
+# :'name' and :'slug' make psql do the quoting. That is also the only version of
+# this that is not an injection waiting for a name with a quote in it.
+#
+# head -1: psql prints the command tag ("INSERT 0 1") after the returned row,
+# and without it the id carries that text into every message below.
+NEW_ID="$(psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -v name="$NAME" -v slug="$SLUG" -tA -f - <<'SQL' | head -1
+INSERT INTO core.tenants (name, slug) VALUES (:'name', :'slug') RETURNING id;
+SQL
+)"
 
 echo "==> Created '${NAME}' (${SLUG})"
 echo "    tenant id: ${NEW_ID}"
