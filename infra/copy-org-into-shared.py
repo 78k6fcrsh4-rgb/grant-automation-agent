@@ -58,7 +58,17 @@ SKIP_COPY = {"core.tenants"}
 
 
 def connect(url: str):
-    import psycopg
+    try:
+        import psycopg
+    except ModuleNotFoundError:
+        sys.exit(
+            "error: psycopg is not importable by this interpreter:\n"
+            f"         {sys.executable}\n"
+            "       Run this with the backend virtualenv's python, not the\n"
+            "       python3 on PATH -- on a Mac with several Homebrew Pythons\n"
+            "       those are different interpreters:\n"
+            "         ./backend/.venv/bin/python infra/copy-org-into-shared.py ..."
+        )
 
     return psycopg.connect(url, autocommit=False)
 
