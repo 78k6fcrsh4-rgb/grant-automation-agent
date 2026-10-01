@@ -41,6 +41,12 @@ if ! WHO="$(psql "$ADMIN_URL" -tAc "SELECT current_user || '@' || current_databa
     echo "       psql said: ${WHO}" >&2
     echo "       - Azure needs ?sslmode=require on the URL." >&2
     echo "       - A password containing @ : / ? # or % must be percent-encoded." >&2
+    echo "       - ADMIN_DATABASE_URL may be a stale export from this shell." >&2
+    echo "         It persists for the life of the shell, so re-deriving it is" >&2
+    echo "         not enough on its own -- re-export it:" >&2
+    echo "           export ADMIN_DATABASE_URL=\"\$(./infra/admin-url.sh <the shared database>)\"" >&2
+    echo "         Check it before using it:" >&2
+    echo "           psql \"\$ADMIN_DATABASE_URL\" -tAc \"SELECT current_user || ' @ ' || current_database()\"" >&2
     exit 1
 fi
 echo "==> Connected as ${WHO}"

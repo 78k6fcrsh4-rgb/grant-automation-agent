@@ -113,6 +113,12 @@ if ! ADMIN_WHO="$(psql "$ADMIN_URL" -tAc "SELECT current_user || '@' || current_
     echo "       - A password containing @ : / ? # or % must be percent-encoded." >&2
     echo "         python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=\"\"))' '<password>'" >&2
     echo "       - The server firewall must allow this machine's IP." >&2
+    echo "       - ADMIN_DATABASE_URL may be a stale export from this shell." >&2
+    echo "         It persists for the life of the shell, so re-deriving it is" >&2
+    echo "         not enough on its own -- re-export it:" >&2
+    echo "           export ADMIN_DATABASE_URL=\"\$(./infra/admin-url.sh)\"" >&2
+    echo "         Check it before using it:" >&2
+    echo "           psql \"\$ADMIN_DATABASE_URL\" -tAc \"SELECT current_user || ' @ ' || current_database()\"" >&2
     exit 1
 fi
 echo "    connected as ${ADMIN_WHO}"
