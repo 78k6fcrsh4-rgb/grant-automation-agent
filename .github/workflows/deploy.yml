@@ -1,9 +1,10 @@
 name: Build and Deploy to Azure
 
 on:
-  push:
-    branches:
-      - main
+  # Auto-deploy on push to main was removed deliberately. It put every
+  # merge straight into the environment three nonprofits use, with no
+  # gate. Restore a trigger only alongside a staging environment and an
+  # approval — see DEV-PLATFORM-PLAN.md section 4.
   workflow_dispatch:
 
 env:
